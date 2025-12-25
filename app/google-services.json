@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "253454228482",
+    "project_id": "bananashield-59b37",
+    "storage_bucket": "bananashield-59b37.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:253454228482:android:5c8f557b91b66864751b1b",
+        "android_client_info": {
+          "package_name": "com.example.bananashield"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "253454228482-d1jcihrkudorbo1ijf45fjcbf8l96jra.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.bananashield",
+            "certificate_hash": "672f4ce7e3fc612454877f08b8a555ab0f333a36"
+          }
+        },
+        {
+          "client_id": "253454228482-o7628ar97e5c8k2qqs0i1g36vmepcvfa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCH5SLtObnlTnJP6w2sFIeRE7FNMK4maro"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "253454228482-o7628ar97e5c8k2qqs0i1g36vmepcvfa.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
