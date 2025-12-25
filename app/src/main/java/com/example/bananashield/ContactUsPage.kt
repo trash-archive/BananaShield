@@ -15,16 +15,177 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.google.firebase.auth.FirebaseAuth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactUsPage(onNavigateBack: () -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
+    val currentUser = FirebaseAuth.getInstance().currentUser
+
+    // Auto-fill user data
+    var name by remember {
+        mutableStateOf(currentUser?.displayName ?: "Anonymous User")
+    }
+    val email = currentUser?.email ?: "No email"
+
     var subject by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
+
+    // Form validation states
+    var subjectError by remember { mutableStateOf(false) }
+    var messageError by remember { mutableStateOf(false) }
+
+    // Loading and success states
+    var isSending by remember { mutableStateOf(false) }
+    var showSuccessDialog by remember { mutableStateOf(false) }
+    var showErrorDialog by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    // Success Dialog
+    if (showSuccessDialog) {
+        Dialog(onDismissRequest = {
+            showSuccessDialog = false
+            onNavigateBack()
+        }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Success",
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Message Sent!",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1B5E20)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Thank you for contacting us. We'll get back to you soon!",
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = {
+                            showSuccessDialog = false
+                            onNavigateBack()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4CAF50)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("OK", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
+    // Error Dialog
+    if (showErrorDialog) {
+        Dialog(onDismissRequest = { showErrorDialog = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = "Error",
+                        tint = Color(0xFFFF5252),
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Failed to Send",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFD32F2F)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage,
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { showErrorDialog = false },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFF5252)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Try Again", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
+    // Loading Dialog
+    if (isSending) {
+        Dialog(onDismissRequest = { }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(64.dp),
+                        color = Color(0xFF4CAF50),
+                        strokeWidth = 6.dp
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "Sending Message...",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1B5E20)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Please wait",
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -85,28 +246,33 @@ fun ContactUsPage(onNavigateBack: () -> Unit) {
                 text = "We're here to help! Get in touch with us",
                 fontSize = 14.sp,
                 color = Color.White.copy(alpha = 0.9f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = TextAlign.Center
             )
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Name Field
+        // Name Field (Editable)
         ContactTextField(
             label = "Your Name",
             value = name,
             onValueChange = { name = it },
-            placeholder = "Your Name"
+            placeholder = "Your Name",
+            readOnly = false,
+            isError = false
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Email Field
+        // Email Field (Read-only - auto-filled)
         ContactTextField(
             label = "Email Address",
             value = email,
-            onValueChange = { email = it },
-            placeholder = "Email Address"
+            onValueChange = { },
+            placeholder = "Email Address",
+            readOnly = true, // This makes it non-editable
+            isError = false,
+            leadingIcon = Icons.Default.Lock // Show lock icon to indicate read-only
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -115,9 +281,23 @@ fun ContactUsPage(onNavigateBack: () -> Unit) {
         ContactTextField(
             label = "Subject",
             value = subject,
-            onValueChange = { subject = it },
-            placeholder = "Subject"
+            onValueChange = {
+                subject = it
+                subjectError = false
+            },
+            placeholder = "What's this about?",
+            readOnly = false,
+            isError = subjectError
         )
+
+        if (subjectError) {
+            Text(
+                text = "Subject is required",
+                color = Color(0xFFFF5252),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -125,17 +305,67 @@ fun ContactUsPage(onNavigateBack: () -> Unit) {
         ContactTextField(
             label = "Your Message",
             value = message,
-            onValueChange = { message = it },
-            placeholder = "Your Message",
+            onValueChange = {
+                message = it
+                messageError = false
+            },
+            placeholder = "Tell us more details...",
             minLines = 5,
-            maxLines = 5
+            maxLines = 8,
+            readOnly = false,
+            isError = messageError
         )
+
+        if (messageError) {
+            Text(
+                text = "Message is required",
+                color = Color(0xFFFF5252),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+            )
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
         // Send Message Button
         Button(
-            onClick = { /* TODO: Send message */ },
+            onClick = {
+                // Form validation
+                var hasError = false
+
+                if (subject.isBlank()) {
+                    subjectError = true
+                    hasError = true
+                }
+
+                if (message.isBlank()) {
+                    messageError = true
+                    hasError = true
+                }
+
+                if (!hasError) {
+                    isSending = true
+
+                    ContactHelper.sendContactMessage(
+                        userName = name,
+                        subject = subject,
+                        message = message,
+                        onSuccess = {
+                            isSending = false
+                            showSuccessDialog = true
+
+                            // Clear form
+                            subject = ""
+                            message = ""
+                        },
+                        onFailure = { exception ->
+                            isSending = false
+                            errorMessage = exception.message ?: "Unknown error occurred"
+                            showErrorDialog = true
+                        }
+                    )
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
@@ -143,8 +373,15 @@ fun ContactUsPage(onNavigateBack: () -> Unit) {
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFFFFD54F)
             ),
-            shape = RoundedCornerShape(28.dp)
+            shape = RoundedCornerShape(28.dp),
+            enabled = !isSending
         ) {
+            Icon(
+                imageVector = Icons.Default.Send,
+                contentDescription = null,
+                tint = Color(0xFF1B5E20)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Send Message",
                 fontSize = 18.sp,
@@ -182,7 +419,7 @@ fun ContactUsPage(onNavigateBack: () -> Unit) {
             text = "+63 912 345 6789"
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
@@ -194,7 +431,10 @@ fun ContactTextField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     minLines: Int = 1,
-    maxLines: Int = 1
+    maxLines: Int = 1,
+    readOnly: Boolean = false,
+    isError: Boolean = false,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null
 ) {
     Column(
         modifier = Modifier
@@ -210,13 +450,27 @@ fun ContactTextField(
                     color = Color.White.copy(alpha = 0.5f)
                 )
             },
+            leadingIcon = if (leadingIcon != null) {
+                {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else null,
+            readOnly = readOnly,
+            isError = isError,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
-                focusedBorderColor = Color(0xFF4CAF50),
-                unfocusedBorderColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
+                disabledTextColor = Color.White.copy(alpha = 0.7f),
+                focusedBorderColor = if (isError) Color(0xFFFF5252) else Color(0xFF4CAF50),
+                unfocusedBorderColor = if (isError) Color(0xFFFF5252) else Color(0xFF4CAF50).copy(alpha = 0.5f),
                 focusedContainerColor = Color(0xFF4CAF50).copy(alpha = 0.3f),
                 unfocusedContainerColor = Color(0xFF4CAF50).copy(alpha = 0.3f),
+                disabledContainerColor = Color(0xFF4CAF50).copy(alpha = 0.2f),
                 cursorColor = Color.White
             ),
             shape = RoundedCornerShape(12.dp),

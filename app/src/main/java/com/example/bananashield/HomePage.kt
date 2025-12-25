@@ -75,7 +75,7 @@ fun HomePage() {
                         onProfileClick = { showProfile = true }
                     )
                     1 -> NotificationContent(paddingValues)
-                    2 -> ScanContent(paddingValues)
+                    2 -> ScanContent(paddingValues)  // This now calls your camera ScanContent
                     3 -> HistoryContent(paddingValues)
                     4 -> SettingsContent(
                         paddingValues = paddingValues,
@@ -90,7 +90,6 @@ fun HomePage() {
     }
 }
 
-
 @Composable
 fun HomeContent(
     paddingValues: PaddingValues,
@@ -104,7 +103,6 @@ fun HomeContent(
     var userData by remember { mutableStateOf<Map<String, Any>?>(null) }
     var isLoadingProfile by remember { mutableStateOf(true) }
 
-    // Load user data for profile image
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { userId ->
             FirestoreHelper.getUserData(
@@ -129,14 +127,12 @@ fun HomeContent(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Header with user greeting
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // User Avatar - Now clickable and shows profile image
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -176,7 +172,6 @@ fun HomeContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Statistics Cards
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -207,7 +202,6 @@ fun HomeContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Recent Activity Section
         Text(
             text = "Recent Activity",
             fontSize = 20.sp,
@@ -218,7 +212,6 @@ fun HomeContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Activity Items
         ActivityItem(
             icon = Icons.Default.Warning,
             iconColor = Color(0xFFFF5252),
@@ -272,43 +265,9 @@ fun NotificationContent(paddingValues: PaddingValues) {
     }
 }
 
-@Composable
-fun ScanContent(paddingValues: PaddingValues) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF2E7D32))
-            .padding(paddingValues),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "Scan",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-    }
-}
+// ScanContent function REMOVED - it's in your camera file now!
 
-@Composable
-fun HistoryContent(paddingValues: PaddingValues) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF2E7D32))
-            .padding(paddingValues),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "History",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-    }
-}
 
-// SettingsContent function REMOVED - it's now in SettingsPage.kt
 
 @Composable
 fun StatCard(
@@ -373,7 +332,6 @@ fun ActivityItem(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -390,7 +348,6 @@ fun ActivityItem(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Text Content
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -408,7 +365,6 @@ fun ActivityItem(
                 )
             }
 
-            // Indicator Dot
             Box(
                 modifier = Modifier
                     .size(12.dp)
@@ -428,12 +384,7 @@ fun BottomNavigationBar(
         contentColor = Color.White
     ) {
         NavigationBarItem(
-            icon = {
-                Icon(
-                    Icons.Default.Home,
-                    contentDescription = "Home"
-                )
-            },
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
             label = { Text("Home") },
             selected = selectedTab == 0,
             onClick = { onTabSelected(0) },
@@ -447,12 +398,7 @@ fun BottomNavigationBar(
         )
 
         NavigationBarItem(
-            icon = {
-                Icon(
-                    Icons.Default.Notifications,
-                    contentDescription = "Notification"
-                )
-            },
+            icon = { Icon(Icons.Default.Notifications, contentDescription = "Notification") },
             label = { Text("Notification") },
             selected = selectedTab == 1,
             onClick = { onTabSelected(1) },
@@ -466,12 +412,7 @@ fun BottomNavigationBar(
         )
 
         NavigationBarItem(
-            icon = {
-                Icon(
-                    Icons.Default.QrCodeScanner,
-                    contentDescription = "Scan"
-                )
-            },
+            icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan") },
             label = { Text("Scan") },
             selected = selectedTab == 2,
             onClick = { onTabSelected(2) },
@@ -485,12 +426,7 @@ fun BottomNavigationBar(
         )
 
         NavigationBarItem(
-            icon = {
-                Icon(
-                    Icons.Default.History,
-                    contentDescription = "History"
-                )
-            },
+            icon = { Icon(Icons.Default.History, contentDescription = "History") },
             label = { Text("History") },
             selected = selectedTab == 3,
             onClick = { onTabSelected(3) },
@@ -504,12 +440,7 @@ fun BottomNavigationBar(
         )
 
         NavigationBarItem(
-            icon = {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = "Settings"
-                )
-            },
+            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
             label = { Text("Settings") },
             selected = selectedTab == 4,
             onClick = { onTabSelected(4) },
