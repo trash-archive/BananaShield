@@ -160,7 +160,16 @@ object ScanHistoryHelper {
                     db.collection(COLLECTION_SCANS)
                         .add(scanData)
                         .addOnSuccessListener { documentReference ->
-                            Log.d(TAG, "✅ Successfully saved with ID: ${documentReference.id}")
+                            Log.d(TAG, "✅ Scan saved with ID: ${documentReference.id}")
+
+                            // 🔔 CREATE NOTIFICATION AFTER SUCCESSFUL SAVE
+                            NotificationHelper.notifyScanComplete(
+                                userId = currentUser.uid,
+                                scanId = documentReference.id,
+                                diseaseName = classification.diseaseInfo.name,  // ✅ FIXED
+                                confidence = classification.confidence
+                            )
+
                             onSuccess(documentReference.id)
                         }
                         .addOnFailureListener { e ->
@@ -168,6 +177,7 @@ object ScanHistoryHelper {
                             e.printStackTrace()
                             onFailure(e)
                         }
+
                 }.addOnFailureListener { e ->
                     Log.e(TAG, "❌ Failed to get download URL: ${e.message}")
                     onFailure(e)

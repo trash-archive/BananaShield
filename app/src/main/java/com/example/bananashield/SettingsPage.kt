@@ -15,13 +15,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 
@@ -52,39 +52,69 @@ fun SettingsContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF2E7D32))
+                .background(Color(0xFFF5F7FA))
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Settings Header
-            Text(
-                text = "Settings",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
+            // Modern Header with Gradient
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
                 color = Color.White,
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
+                shadowElevation = 4.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color(0xFF2E7D32),
+                                    Color(0xFF388E3C)
+                                )
+                            )
+                        )
+                        .padding(24.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Settings",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Manage your preferences",
+                                fontSize = 13.sp,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                }
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Account Section
-            Text(
-                text = "Account",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
+            SectionHeader("Account")
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            SettingsItem(
+            ModernSettingsItem(
                 icon = Icons.Default.Person,
                 title = "Edit Profile",
                 subtitle = "Update your personal information",
-                iconBackground = Color(0xFF81C784),
+                iconColor = Color(0xFF2196F3),
+                iconBackground = Color(0xFFE3F2FD),
                 onClick = { showEditProfile = true }
             )
 
@@ -92,74 +122,67 @@ fun SettingsContent(
 
             // Only show Change Password for email/password users
             if (!isGoogleUser) {
-                SettingsItem(
+                ModernSettingsItem(
                     icon = Icons.Default.Lock,
                     title = "Change Password",
                     subtitle = "Update your account password",
-                    iconBackground = Color(0xFF81C784),
+                    iconColor = Color(0xFFFF9800),
+                    iconBackground = Color(0xFFFFF3E0),
                     onClick = onNavigateToChangePassword
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            SettingsItem(
-                icon = Icons.Default.Info,
+            ModernSettingsItem(
+                icon = Icons.Default.CardMembership,
                 title = "Subscription",
                 subtitle = "Manage your subscription plan",
-                iconBackground = Color(0xFF81C784),
+                iconColor = Color(0xFF9C27B0),
+                iconBackground = Color(0xFFF3E5F5),
                 onClick = { /* TODO: Subscription */ }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             // Support Section
-            Text(
-                text = "Support",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
+            SectionHeader("Support")
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            SettingsItem(
+            ModernSettingsItem(
                 icon = Icons.Default.Help,
                 title = "FAQ and Support",
                 subtitle = "Get answers to common questions",
-                iconBackground = Color(0xFF81C784),
+                iconColor = Color(0xFF00BCD4),
+                iconBackground = Color(0xFFE0F7FA),
                 onClick = onNavigateToFAQ
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            SettingsItem(
+            ModernSettingsItem(
                 icon = Icons.Default.Chat,
                 title = "Contact Us",
                 subtitle = "Send us a message",
-                iconBackground = Color(0xFF81C784),
+                iconColor = Color(0xFF4CAF50),
+                iconBackground = Color(0xFFE8F5E9),
                 onClick = onNavigateToContactUs
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             // About Section
-            Text(
-                text = "About",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
+            SectionHeader("About")
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            SettingsItem(
+            ModernSettingsItem(
                 icon = Icons.Default.Shield,
                 title = "Privacy Policy",
                 subtitle = "Learn how we protect your data",
-                iconBackground = Color(0xFF81C784),
+                iconColor = Color(0xFF607D8B),
+                iconBackground = Color(0xFFECEFF1),
                 onClick = onNavigateToPrivacyPolicy
             )
 
@@ -170,11 +193,12 @@ fun SettingsContent(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
+                        .padding(horizontal = 20.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF4CAF50)
-                    )
+                        containerColor = Color.White
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -182,27 +206,91 @@ fun SettingsContent(
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = "Google",
-                            tint = Color(0xFFFFD54F),
-                            modifier = Modifier.size(24.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Color(0xFFFFF9C4), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = "Google",
+                                tint = Color(0xFFF9A825),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
 
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Signed in with Google",
-                                fontSize = 14.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                                color = Color(0xFF1B5E20)
                             )
                             Text(
                                 text = "Password managed by Google",
                                 fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.8f)
+                                color = Color(0xFF757575)
                             )
                         }
+
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // App Version Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(0xFFE8F5E9), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Version",
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "App Version",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF1B5E20)
+                        )
+                        Text(
+                            text = "BananaShield v1.0.0",
+                            fontSize = 12.sp,
+                            color = Color(0xFF757575)
+                        )
                     }
                 }
             }
@@ -210,31 +298,27 @@ fun SettingsContent(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Account Actions Section
-            Text(
-                text = "Account Actions",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
+            SectionHeader("Account Actions")
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            SettingsItem(
+            ModernSettingsItem(
                 icon = Icons.Default.Logout,
                 title = "Logout",
                 subtitle = "Sign out of your account",
-                iconBackground = Color(0xFFFF5252),
-                onClick = { showLogoutDialog = true }
+                iconColor = Color(0xFFEF5350),
+                iconBackground = Color(0xFFFFEBEE),
+                onClick = { showLogoutDialog = true },
+                showChevron = false
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // App Version
+            // Footer Note
             Text(
-                text = "BananaShield v1.0.0",
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.6f),
+                text = "Made with ❤️ for healthier plants",
+                fontSize = 13.sp,
+                color = Color(0xFF9E9E9E),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp),
@@ -246,7 +330,7 @@ fun SettingsContent(
 
         // Logout Confirmation Dialog
         if (showLogoutDialog) {
-            LogoutDialog(
+            ModernLogoutDialog(
                 onConfirm = {
                     auth.signOut()
                     val intent = Intent(context, MainActivity::class.java).apply {
@@ -261,22 +345,37 @@ fun SettingsContent(
 }
 
 @Composable
-fun SettingsItem(
+fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color(0xFF757575),
+        letterSpacing = 0.5.sp,
+        modifier = Modifier.padding(horizontal = 24.dp)
+    )
+}
+
+@Composable
+fun ModernSettingsItem(
     icon: ImageVector,
     title: String,
     subtitle: String,
+    iconColor: Color,
     iconBackground: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    showChevron: Boolean = true
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 20.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF4CAF50)
-        )
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -287,7 +386,7 @@ fun SettingsItem(
             // Icon
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(iconBackground),
                 contentAlignment = Alignment.Center
@@ -295,8 +394,8 @@ fun SettingsItem(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (iconBackground == Color(0xFFFF5252)) Color.White else Color(0xFF1B5E20),
-                    modifier = Modifier.size(20.dp)
+                    tint = iconColor,
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
@@ -310,125 +409,99 @@ fun SettingsItem(
                     text = title,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White
+                    color = Color(0xFF1B5E20)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
                     fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.8f)
+                    color = Color(0xFF757575)
                 )
             }
 
             // Arrow
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Navigate",
-                tint = Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.size(24.dp)
-            )
+            if (showChevron) {
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Navigate",
+                    tint = Color(0xFFBDBDBD),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
 
 @Composable
-fun LogoutDialog(
+fun ModernLogoutDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF66BB6A)
-            )
-        ) {
-            Column(
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .size(64.dp)
+                    .background(Color(0xFFFFEBEE), CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                // Logout Icon
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFFF5252)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Logout,
-                        contentDescription = "Logout",
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = "Logout?",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                Icon(
+                    imageVector = Icons.Default.Logout,
+                    contentDescription = "Logout",
+                    tint = Color(0xFFEF5350),
+                    modifier = Modifier.size(32.dp)
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Are you sure you want to\nlogout from your account?",
-                    fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.9f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Confirm Button
-                Button(
-                    onClick = onConfirm,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFF5252)
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text(
-                        text = "Yes, Logout",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Cancel Button
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color.White
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text(
-                        text = "Cancel",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
             }
-        }
-    }
+        },
+        title = {
+            Text(
+                text = "Logout?",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1B5E20)
+            )
+        },
+        text = {
+            Text(
+                text = "Are you sure you want to logout from your account?",
+                fontSize = 14.sp,
+                color = Color(0xFF757575),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFEF5350)
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Yes, Logout",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF2E7D32))
+            ) {
+                Text(
+                    text = "Cancel",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF2E7D32)
+                )
+            }
+        },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Color.White
+    )
 }

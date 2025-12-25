@@ -78,6 +78,9 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
 
+    // Accompanist System UI Controller for status bar color
+    implementation("com.google.accompanist:accompanist-systemuicontroller:0.32.0")
+
     // CameraX dependencies
     val camerax_version = "1.3.1"
     implementation("androidx.camera:camera-core:$camerax_version")
