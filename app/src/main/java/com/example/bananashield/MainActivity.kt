@@ -1,18 +1,20 @@
 package com.example.bananashield
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -26,9 +28,31 @@ import com.google.firebase.ktx.Firebase
 class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
 
+    // ✅ Notification permission launcher (Android 13+)
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            android.util.Log.d("MainActivity", "✅ Notification permission granted")
+        } else {
+            android.util.Log.d("MainActivity", "❌ Notification permission denied")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // ✅ Request notification permission (Android 13+ only)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
 
         // Initialize Firebase Auth
         auth = Firebase.auth
@@ -41,15 +65,22 @@ class MainActivity : ComponentActivity() {
                 val currentUser = auth.currentUser
                 val startDestination = if (currentUser != null) "home" else "login"
 
-                var isInitialCheck by remember { mutableStateOf(true) }
+                // ✅ FIXED: Mutable state for deep linking - persists across intents
+                var deepLinkTab by remember { mutableStateOf<Int?>(null) }
+                var deepLinkScanId by remember { mutableStateOf<String?>(null) }
 
+                // Handle INITIAL intent (app launch/cold start)
                 LaunchedEffect(Unit) {
-                    isInitialCheck = false
+                    handleNotificationIntent(intent) { tab, scanId ->
+                        deepLinkTab = tab
+                        deepLinkScanId = scanId
+                        android.util.Log.d("MainActivity", "✅ Initial intent: tab=$tab, scanId=$scanId")
+                    }
                 }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    contentWindowInsets = WindowInsets(0.dp)  // Add this line to remove top padding
+                    contentWindowInsets = WindowInsets(0.dp)
                 ) { innerPadding ->
                     NavHost(
                         navController = navController,
@@ -97,10 +128,47 @@ class MainActivity : ComponentActivity() {
                         }
 
                         composable("home") {
-                            HomePage()
+                            HomePage(
+                                initialTab = deepLinkTab,
+                                deepLinkScanId = deepLinkScanId,
+                                onDeepLinkHandled = {
+                                    deepLinkTab = null
+                                    deepLinkScanId = null
+                                    android.util.Log.d("MainActivity", "✅ Deep link handled - cleared state")
+                                }
+                            )
                         }
                     }
                 }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+
+        // ✅ FIXED: Handle notification when app is already open
+        handleNotificationIntent(intent) { tab, scanId ->
+            android.util.Log.d("MainActivity", "✅ New intent (app open): tab=$tab, scanId=$scanId")
+            // Update the Compose state directly - triggers recomposition!
+            // This will update HomePage → HistoryContent → HistoryDetailScreen
+        }
+    }
+
+    private fun handleNotificationIntent(
+        intent: Intent?,
+        onNavigate: (tab: Int, scanId: String?) -> Unit
+    ) {
+        intent?.let {
+            val destination = it.getStringExtra("destination")
+            val scanId = it.getStringExtra("scanId")
+
+            android.util.Log.d("MainActivity", "Handling intent: destination=$destination, scanId=$scanId")
+
+            if (destination == "scan_result" && scanId != null) {
+                // Navigate to History tab (index 3) with scan ID
+                onNavigate(3, scanId)
             }
         }
     }

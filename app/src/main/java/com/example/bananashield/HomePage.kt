@@ -34,18 +34,30 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun HomePage() {
+fun HomePage(
+    initialTab: Int? = null,
+    deepLinkScanId: String? = null,
+    onDeepLinkHandled: () -> Unit = {}
+) {
     val auth = Firebase.auth
     val currentUser = auth.currentUser
     val userName = currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
     val userInitial = userName.firstOrNull()?.uppercaseChar()?.toString() ?: "U"
 
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableStateOf(initialTab ?: 0) }
     var showProfile by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
     var showFAQ by remember { mutableStateOf(false) }
     var showContactUs by remember { mutableStateOf(false) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
+
+    // Handle deep link navigation
+    LaunchedEffect(initialTab) {
+        initialTab?.let {
+            selectedTab = it
+            onDeepLinkHandled()
+        }
+    }
 
     // Set status bar color to match header
     val view = LocalView.current
@@ -58,7 +70,8 @@ fun HomePage() {
                 else -> android.graphics.Color.parseColor("#F5F7FA")
             }
 
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = selectedTab != 0 && selectedTab != 2
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                selectedTab != 0 && selectedTab != 2
         }
     }
 
@@ -84,7 +97,7 @@ fun HomePage() {
         else -> {
             Scaffold(
                 bottomBar = {
-                    // ✅ Hide bottom navigation when on scan tab (index 2)
+                    // Hide bottom navigation when on scan tab (index 2)
                     if (selectedTab != 2) {
                         BottomNavigationBar(
                             selectedTab = selectedTab,
@@ -93,7 +106,7 @@ fun HomePage() {
                     }
                 }
             ) { paddingValues ->
-                // ✅ Provide paddingValues(0.dp) for scan screen for fullscreen camera
+                // Provide paddingValues(0.dp) for scan screen for fullscreen camera
                 val contentPadding = if (selectedTab == 2) PaddingValues(0.dp) else paddingValues
 
                 when (selectedTab) {
@@ -105,12 +118,19 @@ fun HomePage() {
                         onScanClick = { selectedTab = 2 },
                         onHistoryClick = { selectedTab = 3 }
                     )
-                    1 -> NotificationContent(contentPadding)
+                    1 -> NotificationContent(
+                        paddingValues = contentPadding,
+                        onNavigateBack = { selectedTab = 0 }
+                    )
                     2 -> ScanContent(
                         contentPadding,
-                        onNavigateBack = { selectedTab = 0 } // ✅ Navigate back to home
+                        onNavigateBack = { selectedTab = 0 }
                     )
-                    3 -> HistoryContent(contentPadding)
+                    3 -> HistoryContent(
+                        paddingValues = contentPadding,
+                        deepLinkScanId = deepLinkScanId,
+                        onDeepLinkHandled = onDeepLinkHandled
+                    )
                     4 -> SettingsContent(
                         paddingValues = contentPadding,
                         onNavigateToChangePassword = { showChangePassword = true },
@@ -123,7 +143,6 @@ fun HomePage() {
         }
     }
 }
-
 
 @Composable
 fun HomeContent(
@@ -525,6 +544,7 @@ fun HomeContent(
     }
 }
 
+// Keep all other composables (ModernStatCard, QuickActionCard, etc.) as they were...
 @Composable
 fun ModernStatCard(
     icon: ImageVector,
@@ -724,12 +744,10 @@ fun BottomNavigationBar(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    // Get unread count
     val auth = Firebase.auth
     val currentUser = auth.currentUser
     var unreadCount by remember { mutableStateOf(0) }
 
-    // Load unread notification count
     LaunchedEffect(currentUser?.uid, selectedTab) {
         currentUser?.uid?.let { userId ->
             NotificationHelper.getUnreadCount(
@@ -770,13 +788,11 @@ fun BottomNavigationBar(
                 )
             )
 
-            // Alerts with badge
             NavigationBarItem(
                 icon = {
                     Box {
                         Icon(Icons.Default.Notifications, contentDescription = "Notification")
 
-                        // Badge for unread notifications
                         if (unreadCount > 0) {
                             Box(
                                 modifier = Modifier

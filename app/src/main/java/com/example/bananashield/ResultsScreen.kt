@@ -2,6 +2,7 @@ package com.example.bananashield
 
 import android.graphics.Bitmap
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
@@ -24,11 +25,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 
 // Confidence thresholds
 private const val CONFIDENCE_HIGH = 0.80f
@@ -41,6 +45,10 @@ fun ResultsScreen(
     classification: Classification?,
     onScanAgain: () -> Unit
 ) {
+    val context = LocalContext.current
+    val auth = Firebase.auth
+    val currentUser = auth.currentUser
+
     var showTreatmentDetails by remember { mutableStateOf(false) }
     var showPreventionDetails by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
@@ -48,7 +56,12 @@ fun ResultsScreen(
     var saveError by remember { mutableStateOf<String?>(null) }
     var hasSaved by remember { mutableStateOf(false) }
 
-    // Auto-save scan result
+    // Handle back button press
+    BackHandler(enabled = true) {
+        onScanAgain()
+    }
+
+    // Auto-save scan result + system notification
     LaunchedEffect(Unit) {
         if (bitmap != null && classification != null && !hasSaved) {
             Log.d("ResultsScreen", "🔄 Attempting to save scan...")
@@ -65,6 +78,24 @@ fun ResultsScreen(
                     showSaveSuccess = true
                     isSaving = false
                     hasSaved = true
+
+                    // ✅ Show system notification in status bar
+                    SystemNotificationHelper.showScanCompletedNotification(
+                        context = context,
+                        diseaseName = classification.diseaseInfo.name,
+                        confidence = classification.confidence,
+                        scanId = documentId
+                    )
+
+                    // Also create in-app notification
+                    currentUser?.uid?.let { userId ->
+                        NotificationHelper.notifyScanComplete(
+                            userId = userId,
+                            scanId = documentId,
+                            diseaseName = classification.diseaseInfo.name,
+                            confidence = classification.confidence
+                        )
+                    }
                 },
                 onFailure = { exception ->
                     Log.e("ResultsScreen", "❌ Save failed: ${exception.message}")
@@ -203,8 +234,7 @@ fun ResultsScreen(
 fun ModernLoadingDialog() {
     Dialog(onDismissRequest = { }) {
         Card(
-            modifier = Modifier
-                .size(200.dp),
+            modifier = Modifier.size(200.dp),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -212,9 +242,8 @@ fun ModernLoadingDialog() {
             Column(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center  // Changed from verticalAlignment
+                verticalArrangement = Arrangement.Center
             ) {
-                // Animated loading icon
                 val infiniteTransition = rememberInfiniteTransition(label = "loading")
                 val scale by infiniteTransition.animateFloat(
                     initialValue = 0.8f,
@@ -297,7 +326,6 @@ fun ModernHeader(
                 modifier = Modifier.weight(1f)
             )
 
-            // Save Status
             AnimatedVisibility(
                 visible = showSaveSuccess,
                 enter = fadeIn() + scaleIn()
@@ -337,7 +365,6 @@ fun ModernHeader(
             }
         }
 
-        // Error message
         AnimatedVisibility(
             visible = saveError != null,
             enter = slideInVertically() + fadeIn(),
@@ -396,7 +423,6 @@ fun ModernImagePreview(bitmap: Bitmap?) {
                 )
             }
 
-            // Decorative overlay
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -405,8 +431,7 @@ fun ModernImagePreview(bitmap: Bitmap?) {
                             colors = listOf(
                                 Color.Transparent,
                                 Color.Black.copy(alpha = 0.3f)
-                            ),
-                            startY = 500f
+                            )
                         )
                     )
             )
@@ -444,47 +469,42 @@ fun ConfidenceWarningCard(confidence: Float) {
                 "Result appears reliable and accurate."
             )
         }
-        else -> return // No warning for high confidence
+        else -> return
     }
 
-    AnimatedVisibility(
-        visible = true,
-        enter = slideInVertically() + fadeIn()
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            colors = CardDefaults.cardColors(containerColor = backgroundColor),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconColor,
-                    modifier = Modifier.size(24.dp)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = iconColor
                 )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = title,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = iconColor
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = message,
-                        fontSize = 12.sp,
-                        color = iconColor.copy(alpha = 0.8f),
-                        lineHeight = 16.sp
-                    )
-                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = message,
+                    fontSize = 12.sp,
+                    color = iconColor.copy(alpha = 0.8f),
+                    lineHeight = 16.sp
+                )
             }
         }
     }
@@ -503,7 +523,6 @@ fun ModernDiseaseCard(result: Classification, info: DiseaseInfo) {
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            // Disease Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
@@ -549,7 +568,6 @@ fun ModernDiseaseCard(result: Classification, info: DiseaseInfo) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Metrics Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -582,7 +600,6 @@ fun ModernDiseaseCard(result: Classification, info: DiseaseInfo) {
             Divider(color = Color.LightGray.copy(alpha = 0.3f))
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Scan Info
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -698,8 +715,7 @@ fun ModernInfoSection(
                     color = Color.White.copy(alpha = 0.3f)
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(36.dp),
+                        modifier = Modifier.size(36.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -724,7 +740,7 @@ fun ModernInfoSection(
             items.forEach { item ->
                 Row(
                     modifier = Modifier.padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.Top  // ✅ CORRECT
+                    verticalAlignment = Alignment.Top
                 ) {
                     Box(
                         modifier = Modifier

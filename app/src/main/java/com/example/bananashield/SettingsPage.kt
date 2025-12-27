@@ -56,46 +56,34 @@ fun SettingsContent(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Modern Header with Gradient
+            // Modern header – aligned with History/Notifications style
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = Color.White,
-                shadowElevation = 4.dp
+                shadowElevation = 2.dp
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color(0xFF2E7D32),
-                                    Color(0xFF388E3C)
-                                )
-                            )
-                        )
-                        .padding(24.dp)
-                ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Settings",
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp)
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(26.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
                                 text = "Settings",
-                                fontSize = 24.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = Color(0xFF1B5E20)
                             )
                             Text(
                                 text = "Manage your preferences",
                                 fontSize = 13.sp,
-                                color = Color.White.copy(alpha = 0.9f)
+                                color = Color(0xFF757575)
                             )
                         }
                     }

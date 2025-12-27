@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -32,7 +33,9 @@ import com.google.firebase.ktx.Firebase
 @Composable
 fun ProfilePage(
     paddingValues: PaddingValues,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    totalScans: Int = 0,        // pass real values from caller
+    thisWeekScans: Int = 0      // pass real values from caller
 ) {
     val auth = Firebase.auth
     val context = LocalContext.current
@@ -76,132 +79,174 @@ fun ProfilePage(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF2E7D32))
+                .background(Color(0xFFF5F7FA))
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Top Bar with Back Button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Header – consistent with Home/Settings
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.White,
+                shadowElevation = 2.dp
             ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.White
-                    )
-                }
-            }
-
-            // Profile Header
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Profile Avatar with Edit Icon
-                Box(
-                    contentAlignment = Alignment.BottomEnd
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFFD54F)),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val profileImageUrl = userData?.get("profileImageUrl") as? String
-
-                        if (!profileImageUrl.isNullOrEmpty()) {
-                            Image(
-                                painter = rememberAsyncImagePainter(model = profileImageUrl),
-                                contentDescription = "Profile Image",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color(0xFF2E7D32)
                             )
-                        } else {
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Profile",
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(24.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Column {
                             Text(
-                                text = userInitial,
-                                fontSize = 48.sp,
+                                text = "Profile",
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF1B5E20)
                             )
+                            Text(
+                                text = "View and manage your account",
+                                fontSize = 13.sp,
+                                color = Color(0xFF757575)
+                            )
                         }
                     }
-
-                    // Edit Icon - Clickable
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFFD54F))
-                            .clickable { showEditProfile = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Profile",
-                            tint = Color(0xFF1B5E20),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // User Name
-                Text(
-                    text = userName,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Email
-                Text(
-                    text = userEmail,
-                    fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Statistics Cards
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ProfileStatCard(
-                        value = "47",
-                        label = "Total Scans",
-                        modifier = Modifier.weight(1f)
-                    )
-                    ProfileStatCard(
-                        value = "142",
-                        label = "Healthy Plants",
-                        modifier = Modifier.weight(1f)
-                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Account Information Section
+            // Profile main card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Avatar + edit
+                    Box(contentAlignment = Alignment.BottomEnd) {
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFFF9C4)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val profileImageUrl = userData?.get("profileImageUrl") as? String
+                            if (!profileImageUrl.isNullOrEmpty()) {
+                                Image(
+                                    painter = rememberAsyncImagePainter(model = profileImageUrl),
+                                    contentDescription = "Profile Image",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Text(
+                                    text = userInitial,
+                                    fontSize = 40.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1B5E20)
+                                )
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .offset(x = 4.dp, y = 4.dp)
+                                .clickable { showEditProfile = true },
+                            shape = CircleShape,
+                            color = Color(0xFF2E7D32),
+                            shadowElevation = 4.dp
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Profile",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = userName,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1B5E20)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = userEmail,
+                        fontSize = 13.sp,
+                        color = Color(0xFF757575)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Stats: Total Scans + This Week's Scans
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        ProfileStatCard(
+                            value = totalScans.toString(),
+                            label = "Total Scans",
+                            modifier = Modifier.weight(1f)
+                        )
+                        ProfileStatCard(
+                            value = thisWeekScans.toString(),
+                            label = "This Week's Scans",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Account info
             Text(
                 text = "Account Information",
-                fontSize = 20.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.padding(horizontal = 24.dp)
+                color = Color(0xFF1B5E20),
+                modifier = Modifier.padding(horizontal = 20.dp)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             if (isLoading) {
                 Box(
@@ -210,67 +255,96 @@ fun ProfilePage(
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Color.White)
+                    CircularProgressIndicator(color = Color(0xFF2E7D32))
                 }
             } else {
-                // Phone Number
-                ProfileInfoCard(
-                    icon = Icons.Default.Phone,
-                    label = "Phone Number",
-                    value = userData?.get("phone") as? String ?: "Not set",
-                    iconBackgroundColor = Color(0xFF4CAF50)
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    ProfileInfoRow(
+                        icon = Icons.Default.Phone,
+                        label = "Phone Number",
+                        value = userData?.get("phone") as? String ?: "Not set"
+                    )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    ProfileInfoRow(
+                        icon = Icons.Default.LocationOn,
+                        label = "Location",
+                        value = userData?.get("location") as? String ?: "Not set"
+                    )
 
-                // Location
-                ProfileInfoCard(
-                    icon = Icons.Default.LocationOn,
-                    label = "Location",
-                    value = userData?.get("location") as? String ?: "Not set",
-                    iconBackgroundColor = Color(0xFF4CAF50)
-                )
+                    val farmSize = userData?.get("farmSize") as? String ?: "Not set"
+                    val farmSizeDisplay =
+                        if (farmSize != "Not set") "$farmSize Hectares" else farmSize
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Farm Size
-                val farmSize = userData?.get("farmSize") as? String ?: "Not set"
-                val farmSizeDisplay = if (farmSize != "Not set") "$farmSize Hectares" else farmSize
-
-                ProfileInfoCard(
-                    icon = Icons.Default.Landscape,
-                    label = "Farm Size",
-                    value = farmSizeDisplay,
-                    iconBackgroundColor = Color(0xFF4CAF50)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Log Out Button
-            Button(
-                onClick = { showLogoutDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFD54F)
-                ),
-                shape = RoundedCornerShape(28.dp)
-            ) {
-                Text(
-                    text = "Log Out",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B5E20)
-                )
+                    ProfileInfoRow(
+                        icon = Icons.Default.Landscape,
+                        label = "Farm Size",
+                        value = farmSizeDisplay
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // Danger / actions
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "Account Actions",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFEF5350)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = { showLogoutDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            width = 1.5.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFFEF5350), Color(0xFFFF7043))
+                            )
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFFEF5350)
+                        ),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Log Out",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
 
-        // Logout Confirmation Dialog
         if (showLogoutDialog) {
             LogoutConfirmationDialog(
                 onConfirm = {
@@ -284,141 +358,7 @@ fun ProfilePage(
     }
 }
 
-@Composable
-fun LogoutConfirmationDialog(
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF66BB6A)
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Logout Icon
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFFFD54F)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ExitToApp,
-                        contentDescription = "Logout",
-                        tint = Color(0xFF1B5E20),
-                        modifier = Modifier.size(40.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = "Log Out?",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = "Are you sure you want to log out\nfrom your account?",
-                    fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.9f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Log Out Button
-                Button(
-                    onClick = onConfirm,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFFD54F)
-                    ),
-                    shape = RoundedCornerShape(26.dp)
-                ) {
-                    Text(
-                        text = "Log Out",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1B5E20)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Divider with "or"
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Divider(
-                        modifier = Modifier.weight(1f),
-                        color = Color.White.copy(alpha = 0.3f),
-                        thickness = 1.dp
-                    )
-                    Text(
-                        text = "or",
-                        fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                    Divider(
-                        modifier = Modifier.weight(1f),
-                        color = Color.White.copy(alpha = 0.3f),
-                        thickness = 1.dp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Cancel Button
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color.White
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(0.dp, Color.Transparent),
-                    shape = RoundedCornerShape(26.dp)
-                ) {
-                    Text(
-                        text = "Cancel",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Footer Text
-                Text(
-                    text = "Made for Filipino farmers",
-                    fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.6f)
-                )
-            }
-        }
-    }
-}
+// ───────── helper composables ─────────
 
 @Composable
 fun ProfileStatCard(
@@ -430,87 +370,160 @@ fun ProfileStatCard(
         modifier = modifier.height(90.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF4CAF50)
-        )
+            containerColor = Color(0xFFE8F5E9)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
+                .padding(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
                 text = value,
-                fontSize = 28.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color(0xFF1B5E20)
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = label,
                 fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.9f)
+                color = Color(0xFF4CAF50)
             )
         }
     }
 }
 
 @Composable
-fun ProfileInfoCard(
+fun ProfileInfoRow(
     icon: ImageVector,
     label: String,
-    value: String,
-    iconBackgroundColor: Color
+    value: String
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = iconBackgroundColor
-        )
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.2f)),
+                    .background(Color(0xFFE8F5E9)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
+                    tint = Color(0xFF2E7D32),
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            // Text Content
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
                     fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.8f)
+                    color = Color(0xFF9E9E9E)
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = value,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White
+                    color = Color(0xFF1B5E20)
                 )
             }
         }
     }
+}
+
+@Composable
+fun LogoutConfirmationDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .background(Color(0xFFFFEBEE), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Logout,
+                    contentDescription = "Logout",
+                    tint = Color(0xFFEF5350),
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        },
+        title = {
+            Text(
+                text = "Log out?",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1B5E20)
+            )
+        },
+        text = {
+            Text(
+                text = "Are you sure you want to log out from your account?",
+                fontSize = 14.sp,
+                color = Color(0xFF757575)
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFEF5350)
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Log Out",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    width = 1.5.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(Color(0xFF2E7D32), Color(0xFF66BB6A))
+                    )
+                )
+            ) {
+                Text(
+                    text = "Cancel",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF2E7D32)
+                )
+            }
+        },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Color.White
+    )
 }

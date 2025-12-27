@@ -1,5 +1,6 @@
 package com.example.bananashield
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,7 +70,11 @@ enum class NotificationPriority {
 // ============================================================================
 
 @Composable
-fun NotificationContent(paddingValues: PaddingValues) {
+fun NotificationContent(
+    paddingValues: PaddingValues,
+    onNavigateBack: (() -> Unit)? = null
+) {
+    val context = LocalContext.current
     val auth = Firebase.auth
     val currentUser = auth.currentUser
 
@@ -77,6 +83,11 @@ fun NotificationContent(paddingValues: PaddingValues) {
     var selectedFilter by remember { mutableStateOf("All") }
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
     var showClearAllDialog by remember { mutableStateOf(false) }
+
+    // Handle back button press
+    BackHandler(enabled = true) {
+        onNavigateBack?.invoke()
+    }
 
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { userId ->
@@ -276,7 +287,6 @@ fun NotificationContent(paddingValues: PaddingValues) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // ✅ IMPROVED: Scrollable filter chips
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 0.dp),
@@ -599,7 +609,6 @@ object NotificationHelper {
             }
     }
 
-    // ✅ NEW: Get unread count for badge
     fun getUnreadCount(
         userId: String,
         onSuccess: (Int) -> Unit
