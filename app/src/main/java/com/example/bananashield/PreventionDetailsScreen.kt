@@ -1,5 +1,6 @@
 package com.example.bananashield
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,7 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -24,67 +27,149 @@ fun PreventionDetailsScreen(
     diseaseInfo: DiseaseInfo,
     onBack: () -> Unit
 ) {
+    // ✅ Get status bar and navigation bar height
+    val density = LocalDensity.current
+    val statusBarHeight = WindowInsets.statusBars.getTop(density) / density.density
+    val navigationBarHeight = WindowInsets.navigationBars.getBottom(density) / density.density
+
+    // ✅ ADD BACK HANDLER
+    BackHandler(enabled = true) {
+        onBack()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF2E7D32))
+            .background(Color(0xFFF5F7FA))
     ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // ✅ Fixed Header (NOT scrollable)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.White,
+            shadowElevation = 2.dp
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White
-                )
+            Column {
+                Spacer(modifier = Modifier.height(statusBarHeight.dp + 8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color(0xFF2E7D32)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Column {
+                        Text(
+                            text = "Preventive Measures",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1B5E20)
+                        )
+                        Text(
+                            text = "Protect your crops from disease",
+                            fontSize = 13.sp,
+                            color = Color(0xFF757575)
+                        )
+                    }
+                }
             }
-            Text(
-                text = "Preventive Measures",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
         }
 
-        // Subtitle
-        Text(
-            text = "Follow these measures to prevent disease spread",
-            fontSize = 14.sp,
-            color = Color.White.copy(alpha = 0.8f),
-            modifier = Modifier.padding(horizontal = 60.dp)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Content
+        // ✅ ENTIRE CONTENT SCROLLABLE (including hero card)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
         ) {
-            diseaseInfo.preventiveMeasures.forEach { measure ->
-                PreventionCard(
-                    category = measure.category,
-                    title = measure.title,
-                    steps = measure.steps,
-                    icon = getPreventionIcon(measure.icon)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ✅ Hero Card (NOW SCROLLABLE)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF4CAF50)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(Color.White),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = "Prevention",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Prevention is Key",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Follow these measures to prevent disease spread and keep your plantation healthy.",
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.9f),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 20.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // Prevention Cards
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp)
+            ) {
+                diseaseInfo.preventiveMeasures.forEach { measure ->
+                    ModernPreventionCard(
+                        category = measure.category,
+                        title = measure.title,
+                        steps = measure.steps,
+                        icon = getPreventionIcon(measure.icon)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+
+            // ✅ ADD NAVIGATION BAR PADDING HERE
+            Spacer(modifier = Modifier.height((navigationBarHeight + 16).dp))
         }
     }
 }
 
 @Composable
-fun PreventionCard(
+fun ModernPreventionCard(
     category: String,
     title: String,
     steps: List<String>,
@@ -92,24 +177,24 @@ fun PreventionCard(
 ) {
     val backgroundColor = when (category) {
         "cultural" -> Color(0xFFFFF9C4)
-        "water" -> Color(0xFFB3E5FC)
-        "chemical" -> Color(0xFFF8BBD0)
-        "resistant" -> Color(0xFFDCEDC8)
-        "monitoring" -> Color(0xFFFFE0B2)
-        "biosecurity" -> Color(0xFFD1C4E9)
-        "nutrition" -> Color(0xFFB2DFDB)
-        else -> Color(0xFFE0E0E0)
+        "water" -> Color(0xFFE3F2FD)
+        "chemical" -> Color(0xFFFFEBEE)
+        "resistant" -> Color(0xFFE8F5E9)
+        "monitoring" -> Color(0xFFFFF3E0)
+        "biosecurity" -> Color(0xFFF3E5F5)
+        "nutrition" -> Color(0xFFE0F7FA)
+        else -> Color(0xFFF5F5F5)
     }
 
     val iconColor = when (category) {
         "cultural" -> Color(0xFFF57F17)
-        "water" -> Color(0xFF0277BD)
-        "chemical" -> Color(0xFFC2185B)
-        "resistant" -> Color(0xFF558B2F)
-        "monitoring" -> Color(0xFFE65100)
-        "biosecurity" -> Color(0xFF512DA8)
-        "nutrition" -> Color(0xFF00695C)
-        else -> Color.Gray
+        "water" -> Color(0xFF2196F3)
+        "chemical" -> Color(0xFFEF5350)
+        "resistant" -> Color(0xFF4CAF50)
+        "monitoring" -> Color(0xFFFF9800)
+        "biosecurity" -> Color(0xFF9C27B0)
+        "nutrition" -> Color(0xFF00BCD4)
+        else -> Color(0xFF757575)
     }
 
     Card(
@@ -140,7 +225,8 @@ fun PreventionCard(
                     text = title,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B5E20)
+                    color = Color(0xFF1B5E20),
+                    modifier = Modifier.weight(1f)
                 )
             }
 
@@ -162,8 +248,8 @@ fun PreventionCard(
                     Text(
                         text = step,
                         fontSize = 14.sp,
-                        color = Color.DarkGray,
-                        lineHeight = 20.sp,
+                        color = Color(0xFF424242),
+                        lineHeight = 22.sp,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -184,3 +270,4 @@ fun getPreventionIcon(iconName: String): ImageVector {
         else -> Icons.Default.Info
     }
 }
+

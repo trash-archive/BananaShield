@@ -1,6 +1,7 @@
 package com.example.bananashield
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,11 +23,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
@@ -41,126 +44,181 @@ fun HomePage(
 ) {
     val auth = Firebase.auth
     val currentUser = auth.currentUser
-    val userName = currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
-    val userInitial = userName.firstOrNull()?.uppercaseChar()?.toString() ?: "U"
-
     var selectedTab by remember { mutableStateOf(initialTab ?: 0) }
-    var showProfile by remember { mutableStateOf(false) }
-    var showChangePassword by remember { mutableStateOf(false) }
-    var showFAQ by remember { mutableStateOf(false) }
-    var showContactUs by remember { mutableStateOf(false) }
-    var showPrivacyPolicy by remember { mutableStateOf(false) }
+    var unreadNotifCount by remember { mutableStateOf(0) }
+    var showHistoryDetail by remember { mutableStateOf<ScanHistory?>(null) }
 
-    // Handle deep link navigation
-    LaunchedEffect(initialTab) {
-        initialTab?.let {
-            selectedTab = it
+    // ✅ NEW: Handle deep link navigation
+    LaunchedEffect(initialTab, deepLinkScanId) {
+        if (initialTab != null) {
+            selectedTab = initialTab
+            android.util.Log.d("HomePage", "✅ Navigated to tab: $initialTab")
+
+            // ✅ If there's a scanId, fetch and show the detail
+            if (deepLinkScanId != null) {
+                android.util.Log.d("HomePage", "✅ Fetching scan detail: $deepLinkScanId")
+                ScanHistoryHelper.getScanHistoryById(
+                    scanId = deepLinkScanId,
+                    onSuccess = { scanHistory ->
+                        showHistoryDetail = scanHistory
+                        android.util.Log.d("HomePage", "✅ Opened scan detail: ${scanHistory.diseaseName}")
+                        onDeepLinkHandled()
+                    },
+                    onFailure = { error ->
+                        android.util.Log.e("HomePage", "❌ Failed to fetch scan: ${error.message}")
+                        onDeepLinkHandled()
+                    }
+                )
+            }
+        } else {
             onDeepLinkHandled()
         }
     }
 
-    // Set status bar color to match header
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        LaunchedEffect(selectedTab) {
-            val window = (view.context as Activity).window
-            window.statusBarColor = when (selectedTab) {
-                0 -> android.graphics.Color.parseColor("#2E7D32")
-                2 -> android.graphics.Color.parseColor("#000000") // Black for scan
-                else -> android.graphics.Color.parseColor("#F5F7FA")
+    // Fetch unread notification count
+    LaunchedEffect(currentUser?.uid) {
+        currentUser?.uid?.let { userId ->
+            NotificationHelper.getUnreadCount(userId) { count ->
+                unreadNotifCount = count
             }
-
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
-                selectedTab != 0 && selectedTab != 2
         }
     }
 
-    when {
-        showProfile -> {
-            ProfilePage(
-                paddingValues = PaddingValues(0.dp),
-                onNavigateBack = { showProfile = false }
-            )
-        }
-        showChangePassword -> {
-            ChangePasswordPage(onNavigateBack = { showChangePassword = false })
-        }
-        showFAQ -> {
-            FAQPage(onNavigateBack = { showFAQ = false })
-        }
-        showContactUs -> {
-            ContactUsPage(onNavigateBack = { showContactUs = false })
-        }
-        showPrivacyPolicy -> {
-            PrivacyPolicyPage(onNavigateBack = { showPrivacyPolicy = false })
-        }
-        else -> {
-            Scaffold(
-                bottomBar = {
-                    // Hide bottom navigation when on scan tab (index 2)
-                    if (selectedTab != 2) {
-                        BottomNavigationBar(
-                            selectedTab = selectedTab,
-                            onTabSelected = { selectedTab = it }
-                        )
-                    }
-                }
-            ) { paddingValues ->
-                // Provide paddingValues(0.dp) for scan screen for fullscreen camera
-                val contentPadding = if (selectedTab == 2) PaddingValues(0.dp) else paddingValues
-
-                when (selectedTab) {
-                    0 -> HomeContent(
-                        paddingValues = contentPadding,
-                        userName = userName,
-                        userInitial = userInitial,
-                        onProfileClick = { showProfile = true },
-                        onScanClick = { selectedTab = 2 },
-                        onHistoryClick = { selectedTab = 3 }
-                    )
-                    1 -> NotificationContent(
-                        paddingValues = contentPadding,
-                        onNavigateBack = { selectedTab = 0 }
-                    )
-                    2 -> ScanContent(
-                        contentPadding,
-                        onNavigateBack = { selectedTab = 0 }
-                    )
-                    3 -> HistoryContent(
-                        paddingValues = contentPadding,
-                        deepLinkScanId = deepLinkScanId,
-                        onDeepLinkHandled = onDeepLinkHandled
-                    )
-                    4 -> SettingsContent(
-                        paddingValues = contentPadding,
-                        onNavigateToChangePassword = { showChangePassword = true },
-                        onNavigateToFAQ = { showFAQ = true },
-                        onNavigateToContactUs = { showContactUs = true },
-                        onNavigateToPrivacyPolicy = { showPrivacyPolicy = true }
-                    )
-                }
+    // ✅ Listen to notifications in real-time for badge updates
+    DisposableEffect(currentUser?.uid) {
+        var listenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
+        currentUser?.uid?.let { userId ->
+            listenerRegistration = NotificationHelper.listenToNotifications(userId) { notifications ->
+                unreadNotifCount = notifications.count { !it.read }
             }
+        }
+
+        onDispose {
+            listenerRegistration?.remove()
+        }
+    }
+
+    val density = LocalDensity.current
+    val navigationBarHeight = WindowInsets.navigationBars.getBottom(density) / density.density
+
+    // Set status bar and navigation bar colors properly
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+
+            // Enable edge-to-edge
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+
+            // Set status bar color based on tab
+            window.statusBarColor = when (selectedTab) {
+                0 -> android.graphics.Color.parseColor("#2E7D32")
+                2 -> android.graphics.Color.BLACK
+                else -> android.graphics.Color.parseColor("#F5F7FA")
+            }
+
+            // Set navigation bar color to transparent
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+
+            // Handle Android 8.0+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val insetsController = WindowInsetsControllerCompat(window, view)
+                // Status bar icons (dark for light backgrounds)
+                insetsController.isAppearanceLightStatusBars = selectedTab != 0 && selectedTab != 2
+                // Navigation bar icons (dark for light backgrounds)
+                insetsController.isAppearanceLightNavigationBars = true
+            }
+        }
+    }
+
+    // ✅ Handle showing history detail from deep link
+    if (showHistoryDetail != null) {
+        HistoryDetailScreen(
+            scanHistory = showHistoryDetail!!,
+            onBack = { showHistoryDetail = null }
+        )
+        return
+    }
+
+    Scaffold(
+        bottomBar = {
+            // Hide bottom navigation when on scan tab (index 2)
+            if (selectedTab != 2) {
+                BottomNavigationBar(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it },
+                    unreadCount = unreadNotifCount
+                )
+            }
+        },
+        containerColor = Color(0xFFF5F7FA),
+        contentWindowInsets = WindowInsets(0.dp)
+    ) { paddingValues ->
+        // Provide paddingValues(0.dp) for scan screen for fullscreen camera
+        val contentPadding = if (selectedTab == 2) PaddingValues(0.dp) else paddingValues
+
+        when (selectedTab) {
+            0 -> HomeContent(
+                paddingValues = contentPadding,
+                onScanClick = { selectedTab = 2 },
+                onHistoryClick = { selectedTab = 3 },
+                onNotificationClick = { selectedTab = 1 }
+            )
+
+            1 -> NotificationContent(
+                paddingValues = contentPadding,
+                onNavigateBack = { selectedTab = 0 },
+                onNavigateToScanDetail = { scanId ->
+                    // ✅ Fetch and show scan detail from notification
+                    ScanHistoryHelper.getScanHistoryById(
+                        scanId = scanId,
+                        onSuccess = { scanHistory ->
+                            showHistoryDetail = scanHistory
+                        },
+                        onFailure = { error ->
+                            android.util.Log.e("HomePage", "Failed to fetch scan: ${error.message}")
+                        }
+                    )
+                }
+            )
+
+            2 -> ScanContent(
+                contentPadding,
+                onNavigateBack = { selectedTab = 0 }
+            )
+
+            3 -> HistoryContent(
+                paddingValues = contentPadding,
+                onNavigateToDetail = { scanHistory ->
+                    showHistoryDetail = scanHistory
+                }
+            )
+
+            4 -> SettingsContent(
+                paddingValues = contentPadding,
+                onNavigateBack = { selectedTab = 0 }
+            )
         }
     }
 }
 
+// ✅ Simplified HomeContent - removed unused parameters
 @Composable
 fun HomeContent(
     paddingValues: PaddingValues,
-    userName: String,
-    userInitial: String,
-    onProfileClick: () -> Unit,
     onScanClick: () -> Unit,
-    onHistoryClick: () -> Unit
+    onHistoryClick: () -> Unit,
+    onNotificationClick: () -> Unit = {}
 ) {
     val auth = Firebase.auth
     val currentUser = auth.currentUser
+    val userName = currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
+    val userInitial = userName.firstOrNull()?.uppercaseChar()?.toString() ?: "U"
 
-    var userData by remember { mutableStateOf<Map<String, Any>?>(null) }
+    var userData by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var isLoadingProfile by remember { mutableStateOf(true) }
     var scanHistory by remember { mutableStateOf<List<ScanHistory>>(emptyList()) }
     var isLoadingScans by remember { mutableStateOf(true) }
-    var unreadNotificationCount by remember { mutableStateOf(0) }
 
     // Get status bar height
     val density = LocalDensity.current
@@ -195,18 +253,6 @@ fun HomeContent(
         )
     }
 
-    // Load unread notification count
-    LaunchedEffect(currentUser?.uid) {
-        currentUser?.uid?.let { userId ->
-            NotificationHelper.getUnreadCount(
-                userId = userId,
-                onSuccess = { count ->
-                    unreadNotificationCount = count
-                }
-            )
-        }
-    }
-
     // Calculate statistics
     val totalScans = scanHistory.size
     val healthyScans = scanHistory.count { it.diseaseName.contains("Healthy", ignoreCase = true) }
@@ -230,7 +276,7 @@ fun HomeContent(
             .padding(paddingValues)
             .verticalScroll(rememberScrollState())
     ) {
-        // Header Section
+        // ✅ NEW HEADER with logo on the right
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -244,12 +290,12 @@ fun HomeContent(
                 )
         ) {
             Column {
-                Spacer(modifier = Modifier.height(statusBarHeight.dp + 5.dp))
+                Spacer(modifier = Modifier.height(statusBarHeight.dp + 20.dp))
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
+                        .padding(start = 24.dp, end = 0.dp), // No right padding
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Profile picture
@@ -258,12 +304,10 @@ fun HomeContent(
                             .size(60.dp)
                             .shadow(8.dp, CircleShape)
                             .clip(CircleShape)
-                            .background(Color.White)
-                            .clickable { onProfileClick() },
+                            .background(Color.White),
                         contentAlignment = Alignment.Center
                     ) {
                         val profileImageUrl = userData?.get("profileImageUrl") as? String
-
                         if (!isLoadingProfile && !profileImageUrl.isNullOrEmpty()) {
                             Image(
                                 painter = rememberAsyncImagePainter(model = profileImageUrl),
@@ -292,6 +336,7 @@ fun HomeContent(
                             color = Color.White,
                             lineHeight = 28.sp
                         )
+
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "Let's keep your plants healthy today",
@@ -301,43 +346,30 @@ fun HomeContent(
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    // Notification icon with badge
+                    // ✅ NEW: App logo positioned half-visible on the right
                     Box(
-                        modifier = Modifier.size(50.dp),
+                        modifier = Modifier
+                            .offset(x = 40.dp) // Push it to the right (half hidden)
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        IconButton(
-                            onClick = { /* Notification action */ },
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Notifications",
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
+                        // Replace R.drawable.app_logo with your actual logo drawable
+                        Icon(
+                            imageVector = Icons.Default.Eco, // Replace with painterResource(R.drawable.app_logo)
+                            contentDescription = "App Logo",
+                            tint = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier.size(50.dp)
+                        )
 
-                        // Badge
-                        if (unreadNotificationCount > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = 4.dp, y = 4.dp)
-                                    .background(Color(0xFFFDD835), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (unreadNotificationCount > 9) "9+" else unreadNotificationCount.toString(),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1B5E20)
-                                )
-                            }
-                        }
+                        // ✅ Alternative: Use Image if you have a logo file
+                        // Image(
+                        //     painter = painterResource(R.drawable.app_logo),
+                        //     contentDescription = "App Logo",
+                        //     modifier = Modifier.size(50.dp),
+                        //     contentScale = ContentScale.Fit
+                        // )
                     }
                 }
 
@@ -395,6 +427,7 @@ fun HomeContent(
                     iconColor = Color(0xFF4CAF50),
                     modifier = Modifier.weight(1f)
                 )
+
                 ModernStatCard(
                     icon = Icons.Default.Warning,
                     value = diseasedScans.toString(),
@@ -404,6 +437,7 @@ fun HomeContent(
                     iconColor = Color(0xFFEF5350),
                     modifier = Modifier.weight(1f)
                 )
+
                 ModernStatCard(
                     icon = Icons.Default.Today,
                     value = todayScans.toString(),
@@ -442,6 +476,7 @@ fun HomeContent(
                 modifier = Modifier.weight(1f),
                 onClick = onScanClick
             )
+
             QuickActionCard(
                 icon = Icons.Default.History,
                 label = "History",
@@ -514,6 +549,7 @@ fun HomeContent(
                         tint = Color(0xFFBDBDBD),
                         modifier = Modifier.size(64.dp)
                     )
+
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "No scans yet",
@@ -521,6 +557,7 @@ fun HomeContent(
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF757575)
                     )
+
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Start scanning to track your plants' health",
@@ -544,7 +581,6 @@ fun HomeContent(
     }
 }
 
-// Keep all other composables (ModernStatCard, QuickActionCard, etc.) as they were...
 @Composable
 fun ModernStatCard(
     icon: ImageVector,
@@ -583,6 +619,7 @@ fun ModernStatCard(
                     modifier = Modifier.size(20.dp)
                 )
             }
+
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = value,
@@ -590,6 +627,7 @@ fun ModernStatCard(
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF1B5E20)
             )
+
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = label,
@@ -597,6 +635,7 @@ fun ModernStatCard(
                 fontWeight = FontWeight.SemiBold,
                 color = Color(0xFF1B5E20)
             )
+
             Text(
                 text = description,
                 fontSize = 11.sp,
@@ -634,15 +673,16 @@ fun QuickActionCard(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (backgroundColor == Color(0xFFFBC02D)) Color(0xFF1B5E20) else Color.White,
+                tint = Color.White,
                 modifier = Modifier.size(28.dp)
             )
+
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = label,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (backgroundColor == Color(0xFFFBC02D)) Color(0xFF1B5E20) else Color.White
+                color = Color.White
             )
         }
     }
@@ -657,7 +697,6 @@ fun ModernActivityItem(
     val iconColor = if (isHealthy) Color(0xFF4CAF50) else Color(0xFFEF5350)
     val iconBackground = if (isHealthy) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
     val icon = if (isHealthy) Icons.Default.CheckCircle else Icons.Default.Warning
-
     val timeAgo = getTimeAgo(scan.timestamp)
 
     Card(
@@ -699,6 +738,7 @@ fun ModernActivityItem(
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1B5E20)
                 )
+
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -707,6 +747,7 @@ fun ModernActivityItem(
                         tint = Color(0xFF9E9E9E),
                         modifier = Modifier.size(14.dp)
                     )
+
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = timeAgo,
@@ -742,23 +783,9 @@ fun getTimeAgo(timestamp: Long): String {
 @Composable
 fun BottomNavigationBar(
     selectedTab: Int,
-    onTabSelected: (Int) -> Unit
+    onTabSelected: (Int) -> Unit,
+    unreadCount: Int = 0
 ) {
-    val auth = Firebase.auth
-    val currentUser = auth.currentUser
-    var unreadCount by remember { mutableStateOf(0) }
-
-    LaunchedEffect(currentUser?.uid, selectedTab) {
-        currentUser?.uid?.let { userId ->
-            NotificationHelper.getUnreadCount(
-                userId = userId,
-                onSuccess = { count ->
-                    unreadCount = count
-                }
-            )
-        }
-    }
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -769,118 +796,144 @@ fun BottomNavigationBar(
         color = Color.White,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
     ) {
-        NavigationBar(
-            containerColor = Color.Transparent,
-            contentColor = Color(0xFF2E7D32),
-            modifier = Modifier.height(80.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
         ) {
-            NavigationBarItem(
-                icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                label = { Text("Home", fontSize = 11.sp) },
-                selected = selectedTab == 0,
-                onClick = { onTabSelected(0) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color(0xFF2E7D32),
-                    selectedTextColor = Color(0xFF2E7D32),
-                    unselectedIconColor = Color(0xFF9E9E9E),
-                    unselectedTextColor = Color(0xFF9E9E9E),
-                    indicatorColor = Color.Transparent
+            NavigationBar(
+                containerColor = Color.Transparent,
+                contentColor = Color(0xFF2E7D32),
+                modifier = Modifier.height(80.dp)
+            ) {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                    label = { Text("Home", fontSize = 11.sp) },
+                    selected = selectedTab == 0,
+                    onClick = { onTabSelected(0) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF2E7D32),
+                        selectedTextColor = Color(0xFF2E7D32),
+                        unselectedIconColor = Color(0xFF9E9E9E),
+                        unselectedTextColor = Color(0xFF9E9E9E),
+                        indicatorColor = Color.Transparent
+                    )
                 )
-            )
 
-            NavigationBarItem(
-                icon = {
-                    Box {
-                        Icon(Icons.Default.Notifications, contentDescription = "Notification")
+                NavigationBarItem(
+                    icon = {
+                        Box(
+                            modifier = Modifier.size(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = "Notification",
+                                modifier = Modifier.fillMaxSize()
+                            )
 
-                        if (unreadCount > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = 8.dp, y = (-4).dp)
-                                    .background(Color(0xFFEF5350), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (unreadCount > 9) "9+" else unreadCount.toString(),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                            // ✅ PERFECTLY CENTERED BADGE - ALTERNATIVE PADDING APPROACH
+                            if (unreadCount > 0) {
+                                val badgeText = when {
+                                    unreadCount > 99 -> "9+"
+                                    else -> unreadCount.toString()
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 6.dp, y = (-4).dp)
+                                        .background(Color(0xFFEF5350), CircleShape)
+                                        .padding(
+                                            top = if (badgeText.length == 1) 2.5.dp else 2.dp,
+                                            bottom = if (badgeText.length == 1) 2.5.dp else 2.dp
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = badgeText,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 9.sp,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
-                    }
-                },
-                label = { Text("Alerts", fontSize = 11.sp) },
-                selected = selectedTab == 1,
-                onClick = { onTabSelected(1) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color(0xFF2E7D32),
-                    selectedTextColor = Color(0xFF2E7D32),
-                    unselectedIconColor = Color(0xFF9E9E9E),
-                    unselectedTextColor = Color(0xFF9E9E9E),
-                    indicatorColor = Color.Transparent
+                    },
+                    label = { Text("Alerts", fontSize = 11.sp) },
+                    selected = selectedTab == 1,
+                    onClick = { onTabSelected(1) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF2E7D32),
+                        selectedTextColor = Color(0xFF2E7D32),
+                        unselectedIconColor = Color(0xFF9E9E9E),
+                        unselectedTextColor = Color(0xFF9E9E9E),
+                        indicatorColor = Color.Transparent
+                    )
                 )
-            )
 
-            NavigationBarItem(
-                icon = {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .offset(y = (-8).dp)
-                            .shadow(8.dp, CircleShape)
-                            .background(Color(0xFF2E7D32), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.QrCodeScanner,
-                            contentDescription = "Scan",
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                },
-                label = { },
-                selected = selectedTab == 2,
-                onClick = { onTabSelected(2) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color.White,
-                    selectedTextColor = Color(0xFF2E7D32),
-                    unselectedIconColor = Color.White,
-                    unselectedTextColor = Color(0xFF9E9E9E),
-                    indicatorColor = Color.Transparent
+                NavigationBarItem(
+                    icon = {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .offset(y = (-8).dp)
+                                .shadow(8.dp, CircleShape)
+                                .background(Color(0xFF2E7D32), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "Scan",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    },
+                    label = { },
+                    selected = selectedTab == 2,
+                    onClick = { onTabSelected(2) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color.White,
+                        selectedTextColor = Color(0xFF2E7D32),
+                        unselectedIconColor = Color.White,
+                        unselectedTextColor = Color(0xFF9E9E9E),
+                        indicatorColor = Color.Transparent
+                    )
                 )
-            )
 
-            NavigationBarItem(
-                icon = { Icon(Icons.Default.History, contentDescription = "History") },
-                label = { Text("History", fontSize = 11.sp) },
-                selected = selectedTab == 3,
-                onClick = { onTabSelected(3) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color(0xFF2E7D32),
-                    selectedTextColor = Color(0xFF2E7D32),
-                    unselectedIconColor = Color(0xFF9E9E9E),
-                    unselectedTextColor = Color(0xFF9E9E9E),
-                    indicatorColor = Color.Transparent
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.History, contentDescription = "History") },
+                    label = { Text("History", fontSize = 11.sp) },
+                    selected = selectedTab == 3,
+                    onClick = { onTabSelected(3) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF2E7D32),
+                        selectedTextColor = Color(0xFF2E7D32),
+                        unselectedIconColor = Color(0xFF9E9E9E),
+                        unselectedTextColor = Color(0xFF9E9E9E),
+                        indicatorColor = Color.Transparent
+                    )
                 )
-            )
 
-            NavigationBarItem(
-                icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                label = { Text("Settings", fontSize = 11.sp) },
-                selected = selectedTab == 4,
-                onClick = { onTabSelected(4) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color(0xFF2E7D32),
-                    selectedTextColor = Color(0xFF2E7D32),
-                    unselectedIconColor = Color(0xFF9E9E9E),
-                    unselectedTextColor = Color(0xFF9E9E9E),
-                    indicatorColor = Color.Transparent
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                    label = { Text("Settings", fontSize = 11.sp) },
+                    selected = selectedTab == 4,
+                    onClick = { onTabSelected(4) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF2E7D32),
+                        selectedTextColor = Color(0xFF2E7D32),
+                        unselectedIconColor = Color(0xFF9E9E9E),
+                        unselectedTextColor = Color(0xFF9E9E9E),
+                        indicatorColor = Color.Transparent
+                    )
                 )
-            )
+            }
         }
     }
 }

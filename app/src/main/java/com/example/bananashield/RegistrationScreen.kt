@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,9 +17,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -50,7 +52,12 @@ fun RegistrationScreen(
     var agreedToTerms by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var isGoogleLoading by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
+
+    // ✅ Get status bar height
+    val density = LocalDensity.current
+    val statusBarHeight = WindowInsets.statusBars.getTop(density) / density.density
 
     // Configure Google Sign-In
     val gso = remember {
@@ -73,7 +80,7 @@ fun RegistrationScreen(
             try {
                 val account = task.getResult(ApiException::class.java)
                 account?.idToken?.let { idToken ->
-                    isLoading = true
+                    isGoogleLoading = true
                     Log.d("Registration", "Google Sign-In token received")
                     val credential = GoogleAuthProvider.getCredential(idToken, null)
                     auth.signInWithCredential(credential)
@@ -90,419 +97,605 @@ fun RegistrationScreen(
                                         email = it.email ?: "",
                                         phone = "",
                                         onSuccess = {
-                                            isLoading = false
+                                            isGoogleLoading = false
                                             onRegistrationSuccess()
                                         },
                                         onFailure = { exception ->
-                                            isLoading = false
+                                            isGoogleLoading = false
                                             errorMessage = "Registration successful but failed to save data: ${exception.message}"
                                             onRegistrationSuccess()
                                         }
                                     )
                                 }
                             } else {
-                                isLoading = false
+                                isGoogleLoading = false
                                 errorMessage = authTask.exception?.message ?: "Authentication failed"
                             }
                         }
                 }
             } catch (e: ApiException) {
-                isLoading = false
+                isGoogleLoading = false
                 errorMessage = "Google sign-in failed: ${e.message}"
                 Log.e("Registration", "Google sign-in failed", e)
             }
+        } else {
+            isGoogleLoading = false
         }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF2E7D32),
-                        Color(0xFF1B5E20)
-                    )
-                )
-            )
+            .background(Color(0xFFF5F7FA))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
+            // ✅ Top Header Section with Logo
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFF4CAF50),
+                shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = statusBarHeight.dp + 32.dp, bottom = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(CircleShape)
+                            .background(Color.White),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.logo),
+                            contentDescription = "BananaShield Logo",
+                            modifier = Modifier.size(80.dp)
+                        )
+                    }
 
-            // Logo
-            Image(
-                painter = painterResource(id = R.drawable.logo),
-                contentDescription = "BananaShield Logo",
-                modifier = Modifier.size(120.dp)
-            )
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Create Account",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
 
-            // Title
-            Text(
-                text = "Create Account",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Join BananaShield today",
-                fontSize = 16.sp,
-                color = Color.White.copy(alpha = 0.8f)
-            )
+                    Text(
+                        text = "Join BananaShield to protect your crops",
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // First Name Field
-            CustomTextField(
-                value = firstName,
-                onValueChange = { firstName = it },
-                placeholder = "First Name",
-                icon = Icons.Default.Person
-            )
+            // ✅ Form Section
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+            ) {
+                // First Name
+                ModernRegistrationTextField(
+                    label = "First Name",
+                    value = firstName,
+                    onValueChange = {
+                        firstName = it
+                        errorMessage = null
+                    },
+                    placeholder = "Enter your first name",
+                    icon = Icons.Default.Person,
+                    iconColor = Color(0xFF2196F3),
+                    iconBackground = Color(0xFFE3F2FD)
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Last Name Field
-            CustomTextField(
-                value = lastName,
-                onValueChange = { lastName = it },
-                placeholder = "Last Name",
-                icon = Icons.Default.Person
-            )
+                // Last Name
+                ModernRegistrationTextField(
+                    label = "Last Name",
+                    value = lastName,
+                    onValueChange = {
+                        lastName = it
+                        errorMessage = null
+                    },
+                    placeholder = "Enter your last name",
+                    icon = Icons.Default.Person,
+                    iconColor = Color(0xFF2196F3),
+                    iconBackground = Color(0xFFE3F2FD)
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Email Field
-            CustomTextField(
-                value = email,
-                onValueChange = { email = it },
-                placeholder = "Email",
-                icon = Icons.Default.Email
-            )
+                // Email
+                ModernRegistrationTextField(
+                    label = "Email Address",
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        errorMessage = null
+                    },
+                    placeholder = "Enter your email",
+                    icon = Icons.Default.Email,
+                    iconColor = Color(0xFF4CAF50),
+                    iconBackground = Color(0xFFE8F5E9)
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Phone Field
-            CustomTextField(
-                value = phone,
-                onValueChange = { phone = it },
-                placeholder = "Phone Number",
-                icon = Icons.Default.Phone
-            )
+                // Phone
+                ModernRegistrationTextField(
+                    label = "Phone Number",
+                    value = phone,
+                    onValueChange = {
+                        phone = it
+                        errorMessage = null
+                    },
+                    placeholder = "Enter your phone number",
+                    icon = Icons.Default.Phone,
+                    iconColor = Color(0xFFFF9800),
+                    iconBackground = Color(0xFFFFF3E0)
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Password Field with Toggle
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                placeholder = {
-                    Text(
-                        text = "Password",
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                },
-                trailingIcon = {
-                    IconButton(onClick = { showPassword = !showPassword }) {
-                        Icon(
-                            imageVector = if (showPassword) Icons.Default.Lock else Icons.Default.Lock,
-                            contentDescription = if (showPassword) "Hide password" else "Show password",
-                            tint = Color.White.copy(alpha = 0.7f)
+                // Password
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFFEBEE)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = Color(0xFFEF5350),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Text(
+                                text = "Password",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF757575)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = {
+                                password = it
+                                errorMessage = null
+                            },
+                            placeholder = {
+                                Text(
+                                    text = "Create a strong password",
+                                    color = Color(0xFFBDBDBD)
+                                )
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = { showPassword = !showPassword }) {
+                                    Icon(
+                                        imageVector = if (showPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = if (showPassword) "Hide password" else "Show password",
+                                        tint = Color(0xFF757575)
+                                    )
+                                }
+                            },
+                            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color(0xFF1B5E20),
+                                unfocusedTextColor = Color(0xFF424242),
+                                focusedBorderColor = Color(0xFF2E7D32),
+                                unfocusedBorderColor = Color(0xFFE0E0E0),
+                                focusedContainerColor = Color(0xFFF5F7FA),
+                                unfocusedContainerColor = Color(0xFFF5F7FA),
+                                cursorColor = Color(0xFF2E7D32)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            enabled = !isLoading && !isGoogleLoading
                         )
                     }
-                },
-                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedBorderColor = Color.White,
-                    unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
-                    cursorColor = Color.White
-                ),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            // Terms Checkbox
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Checkbox(
-                    checked = agreedToTerms,
-                    onCheckedChange = { agreedToTerms = it },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = Color(0xFFFFD54F),
-                        uncheckedColor = Color.White,
-                        checkmarkColor = Color(0xFF1B5E20)
-                    )
-                )
-                Text(
-                    text = "I agree to the Terms & Conditions",
-                    color = Color.White,
-                    fontSize = 14.sp
-                )
-            }
-
-            // Error Message
-            if (errorMessage != null) {
-                Spacer(modifier = Modifier.height(8.dp))
+                // Terms Checkbox
                 Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFF5252).copy(alpha = 0.2f)
+                        containerColor = if (agreedToTerms) Color(0xFFE8F5E9) else Color.White
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
-                    Text(
-                        text = errorMessage ?: "",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(12.dp)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                    ) {
+                        Checkbox(
+                            checked = agreedToTerms,
+                            onCheckedChange = { agreedToTerms = it },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = Color(0xFF4CAF50),
+                                uncheckedColor = Color(0xFF9E9E9E),
+                                checkmarkColor = Color.White
+                            ),
+                            enabled = !isLoading && !isGoogleLoading
+                        )
+                        Text(
+                            text = "I agree to the Terms & Conditions",
+                            color = if (agreedToTerms) Color(0xFF2E7D32) else Color(0xFF757575),
+                            fontSize = 14.sp,
+                            fontWeight = if (agreedToTerms) FontWeight.Medium else FontWeight.Normal
+                        )
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Sign Up Button
-            Button(
-                onClick = {
-                    errorMessage = null
-
-                    if (!agreedToTerms) {
-                        errorMessage = "Please agree to Terms & Conditions"
-                        return@Button
-                    }
-                    if (firstName.isBlank() || lastName.isBlank()) {
-                        errorMessage = "Please enter your full name"
-                        return@Button
-                    }
-                    if (email.isBlank() || password.isBlank()) {
-                        errorMessage = "Email and password are required"
-                        return@Button
-                    }
-                    if (password.length < 6) {
-                        errorMessage = "Password must be at least 6 characters"
-                        return@Button
-                    }
-
-                    isLoading = true
-                    Log.d("Registration", "Starting registration for email: $email")
-
-                    auth.createUserWithEmailAndPassword(email, password)
-                        .addOnCompleteListener { task ->
-                            if (task.isSuccessful) {
-                                Log.d("Registration", "Firebase Auth successful")
-                                val user = auth.currentUser
-
-                                if (user != null) {
-                                    val profileUpdates = userProfileChangeRequest {
-                                        displayName = "$firstName $lastName"
-                                    }
-
-                                    user.updateProfile(profileUpdates)
-                                        .addOnCompleteListener { profileTask ->
-                                            if (profileTask.isSuccessful) {
-                                                Log.d("Registration", "Profile updated, saving to Firestore")
-
-                                                // Save to Firestore
-                                                FirestoreHelper.saveUserData(
-                                                    userId = user.uid,
-                                                    firstName = firstName,
-                                                    lastName = lastName,
-                                                    email = email,
-                                                    phone = phone,
-                                                    onSuccess = {
-                                                        Log.d("Registration", "Firestore save successful!")
-                                                        isLoading = false
-                                                        onRegistrationSuccess()
-                                                    },
-                                                    onFailure = { exception ->
-                                                        Log.e("Registration", "Firestore save failed", exception)
-                                                        isLoading = false
-                                                        errorMessage = "Registration successful but failed to save data: ${exception.message}"
-                                                        onRegistrationSuccess()
-                                                    }
-                                                )
-                                            } else {
-                                                Log.e("Registration", "Profile update failed")
-                                                isLoading = false
-                                                errorMessage = "Failed to update profile: ${profileTask.exception?.message}"
-                                            }
-                                        }
-                                } else {
-                                    Log.e("Registration", "User is null after registration")
-                                    isLoading = false
-                                    errorMessage = "Registration failed: User not found"
-                                }
-                            } else {
-                                Log.e("Registration", "Firebase Auth failed", task.exception)
-                                isLoading = false
-                                errorMessage = task.exception?.message ?: "Registration failed"
-                            }
+                // Error Message
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFEBEE)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = Color(0xFFEF5350),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = errorMessage ?: "",
+                                color = Color(0xFFEF5350),
+                                fontSize = 14.sp
+                            )
                         }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFD54F)
-                ),
-                shape = RoundedCornerShape(28.dp),
-                enabled = !isLoading
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = Color(0xFF1B5E20),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        text = "Sign Up",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1B5E20)
-                    )
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            // OR Divider
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(
-                    modifier = Modifier.weight(1f),
-                    color = Color.White.copy(alpha = 0.5f)
-                )
-                Text(
-                    text = "  OR  ",
-                    color = Color.White,
-                    fontSize = 14.sp
-                )
-                HorizontalDivider(
-                    modifier = Modifier.weight(1f),
-                    color = Color.White.copy(alpha = 0.5f)
-                )
-            }
+                // Sign Up Button
+                Button(
+                    onClick = {
+                        errorMessage = null
 
-            Spacer(modifier = Modifier.height(16.dp))
+                        if (!agreedToTerms) {
+                            errorMessage = "Please agree to Terms & Conditions"
+                            return@Button
+                        }
+                        if (firstName.isBlank() || lastName.isBlank()) {
+                            errorMessage = "Please enter your full name"
+                            return@Button
+                        }
+                        if (email.isBlank() || password.isBlank()) {
+                            errorMessage = "Email and password are required"
+                            return@Button
+                        }
+                        if (password.length < 6) {
+                            errorMessage = "Password must be at least 6 characters"
+                            return@Button
+                        }
 
-            // Google Sign-In Button
-            OutlinedButton(
-                onClick = {
-                    errorMessage = null
-                    val signInIntent = googleSignInClient.signInIntent
-                    googleSignInLauncher.launch(signInIntent)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.White
-                ),
-                shape = RoundedCornerShape(28.dp),
-                enabled = !isLoading
-            ) {
+                        isLoading = true
+                        Log.d("Registration", "Starting registration for email: $email")
+
+                        auth.createUserWithEmailAndPassword(email, password)
+                            .addOnCompleteListener { task ->
+                                if (task.isSuccessful) {
+                                    Log.d("Registration", "Firebase Auth successful")
+                                    val user = auth.currentUser
+
+                                    if (user != null) {
+                                        val profileUpdates = userProfileChangeRequest {
+                                            displayName = "$firstName $lastName"
+                                        }
+
+                                        user.updateProfile(profileUpdates)
+                                            .addOnCompleteListener { profileTask ->
+                                                if (profileTask.isSuccessful) {
+                                                    Log.d("Registration", "Profile updated, saving to Firestore")
+
+                                                    FirestoreHelper.saveUserData(
+                                                        userId = user.uid,
+                                                        firstName = firstName,
+                                                        lastName = lastName,
+                                                        email = email,
+                                                        phone = phone,
+                                                        onSuccess = {
+                                                            Log.d("Registration", "Firestore save successful!")
+                                                            isLoading = false
+                                                            onRegistrationSuccess()
+                                                        },
+                                                        onFailure = { exception ->
+                                                            Log.e("Registration", "Firestore save failed", exception)
+                                                            isLoading = false
+                                                            errorMessage = "Registration successful but failed to save data: ${exception.message}"
+                                                            onRegistrationSuccess()
+                                                        }
+                                                    )
+                                                } else {
+                                                    Log.e("Registration", "Profile update failed")
+                                                    isLoading = false
+                                                    errorMessage = "Failed to update profile: ${profileTask.exception?.message}"
+                                                }
+                                            }
+                                    } else {
+                                        Log.e("Registration", "User is null after registration")
+                                        isLoading = false
+                                        errorMessage = "Registration failed: User not found"
+                                    }
+                                } else {
+                                    Log.e("Registration", "Firebase Auth failed", task.exception)
+                                    isLoading = false
+                                    errorMessage = task.exception?.message ?: "Registration failed"
+                                }
+                            }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF2E7D32)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    enabled = !isLoading && !isGoogleLoading
+                ) {
+                    if (isLoading) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.5.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Creating Account...",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Create Account",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Divider
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Google",
-                        tint = Color(0xFF1B5E20),
-                        modifier = Modifier.size(24.dp)
+                    Divider(
+                        modifier = Modifier.weight(1f),
+                        color = Color(0xFFE0E0E0)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Sign up with Google",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF1B5E20)
+                        text = "  or continue with  ",
+                        color = Color(0xFF9E9E9E),
+                        fontSize = 13.sp
+                    )
+                    Divider(
+                        modifier = Modifier.weight(1f),
+                        color = Color(0xFFE0E0E0)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            // Already have account
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Already have an account? ",
-                    color = Color.White,
-                    fontSize = 14.sp
-                )
-                TextButton(
-                    onClick = onNavigateToLogin,
-                    enabled = !isLoading
+                // Google Sign-In Button
+                OutlinedButton(
+                    onClick = {
+                        errorMessage = null
+                        isGoogleLoading = true
+                        val signInIntent = googleSignInClient.signInIntent
+                        googleSignInLauncher.launch(signInIntent)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.White,
+                        contentColor = Color(0xFF424242)
+                    ),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFE0E0E0))
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    enabled = !isLoading && !isGoogleLoading
+                ) {
+                    if (isGoogleLoading) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color(0xFF2E7D32),
+                                strokeWidth = 2.5.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Signing Up...",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF424242)
+                            )
+                        }
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.drawable.google_logo),
+                            contentDescription = "Google Logo",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Sign up with Google",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF424242)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Login Link
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Log In",
-                        color = Color(0xFFFFD54F),
-                        fontWeight = FontWeight.Bold,
+                        text = "Already have an account? ",
+                        color = Color(0xFF757575),
                         fontSize = 14.sp
                     )
+                    TextButton(
+                        onClick = onNavigateToLogin,
+                        enabled = !isLoading && !isGoogleLoading
+                    ) {
+                        Text(
+                            text = "Sign In",
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(64.dp))
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CustomTextField(
+fun ModernRegistrationTextField(
+    label: String,
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    isPassword: Boolean = false
+    iconColor: Color,
+    iconBackground: Color
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        placeholder = {
-            Text(
-                text = placeholder,
-                color = Color.White.copy(alpha = 0.6f)
-            )
-        },
-        trailingIcon = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.7f)
-            )
-        },
-        visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            focusedBorderColor = Color.White,
-            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
-            cursorColor = Color.White
-        ),
-        shape = RoundedCornerShape(14.dp),
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        singleLine = true
-    )
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(iconBackground),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF757575)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                placeholder = {
+                    Text(
+                        text = placeholder,
+                        color = Color(0xFFBDBDBD)
+                    )
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color(0xFF1B5E20),
+                    unfocusedTextColor = Color(0xFF424242),
+                    focusedBorderColor = Color(0xFF2E7D32),
+                    unfocusedBorderColor = Color(0xFFE0E0E0),
+                    focusedContainerColor = Color(0xFFF5F7FA),
+                    unfocusedContainerColor = Color(0xFFF5F7FA),
+                    cursorColor = Color(0xFF2E7D32)
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
+    }
 }

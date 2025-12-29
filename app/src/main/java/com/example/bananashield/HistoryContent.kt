@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -34,14 +35,15 @@ import kotlinx.coroutines.flow.first
 fun HistoryContent(
     paddingValues: PaddingValues,
     deepLinkScanId: String? = null,
-    onDeepLinkHandled: () -> Unit = {}
+    onDeepLinkHandled: () -> Unit = {},
+    onNavigateToDetail: (ScanHistory) -> Unit, // ✅ REQUIRED - no default
+    onNavigateBack: (() -> Unit)? = null
 ) {
     var scanHistory by remember { mutableStateOf<List<ScanHistory>>(emptyList()) }
     var filteredHistory by remember { mutableStateOf<List<ScanHistory>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var selectedScan by remember { mutableStateOf<ScanHistory?>(null) }
 
     // Filter/Sort/Delete states
     var sortOption by remember { mutableStateOf("Newest First") }
@@ -56,26 +58,38 @@ fun HistoryContent(
 
     val listState = rememberLazyListState()
 
-    // ✅ REPLACE your LaunchedEffect in HistoryContent with this:
+    // ✅ Get status bar height
+    val density = LocalDensity.current
+    val statusBarHeight = WindowInsets.statusBars.getTop(density) / density.density
+
+    // ✅ Deep link handling - scrolls to scan instead of opening detail
     LaunchedEffect(deepLinkScanId) {
         deepLinkScanId?.let { scanId ->
-            // Wait for scanHistory to load, then find and open
             snapshotFlow { scanHistory }
                 .filter { it.isNotEmpty() }
                 .first()
                 .find { it.id == scanId }
                 ?.let { targetScan ->
-                    selectedScan = targetScan
-                    android.util.Log.d("HistoryContent", "✅ Deep link opened: ${targetScan.diseaseName}")
-                    onDeepLinkHandled()
+                    val index = scanHistory.indexOf(targetScan)
+                    if (index >= 0) {
+                        listState.animateScrollToItem(index)
+                        android.util.Log.d("HistoryContent", "✅ Deep link scrolled to: ${targetScan.diseaseName}")
+                        onDeepLinkHandled()
+                    }
                 }
         }
     }
 
-    // Handle back button
+    // ✅ SIMPLIFIED BackHandler
     BackHandler(enabled = true) {
-        if (selectedScan != null) {
-            selectedScan = null
+        when {
+            isSelectionMode -> {
+                isSelectionMode = false
+                selectedItems = emptySet()
+            }
+            else -> {
+                onNavigateBack?.invoke()
+            }
         }
     }
 
@@ -190,299 +204,286 @@ fun HistoryContent(
         )
     }
 
-    // Show detailed view if a scan is selected (and not in selection mode)
-    if (selectedScan != null && !isSelectionMode) {
-        HistoryDetailScreen(
-            scanHistory = selectedScan!!,
-            onBack = { selectedScan = null }
-        )
-        return
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF5F7FA))
             .padding(paddingValues)
     ) {
-        // Inside HistoryContent, above the content Box/LazyColumn:
-
+        // ✅ Header with status bar padding
         Surface(
-            modifier = Modifier
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             color = Color.White,
             shadowElevation = 2.dp
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column {
+                Spacer(modifier = Modifier.height(statusBarHeight.dp))
 
-                // ── Top row: title / selection + refresh + (optional) delete ──
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (isSelectionMode) {
-                            IconButton(
-                                onClick = {
-                                    isSelectionMode = false
-                                    selectedItems = emptySet()
+                Column(modifier = Modifier.padding(20.dp)) {
+                    // ── Top row: title / selection + refresh + (optional) delete ──
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isSelectionMode) {
+                                IconButton(
+                                    onClick = {
+                                        isSelectionMode = false
+                                        selectedItems = emptySet()
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Cancel selection",
+                                        tint = Color(0xFF2E7D32),
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                 }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Cancel selection",
-                                    tint = Color(0xFF2E7D32),
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "${selectedItems.size} selected",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1B5E20)
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = "History",
-                                tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Scan History",
-                                    fontSize = 22.sp,
+                                    text = "${selectedItems.size} selected",
+                                    fontSize = 20.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF1B5E20)
                                 )
-                                if (!isLoading && filteredHistory.isNotEmpty()) {
-                                    Text(
-                                        text = "${filteredHistory.size} ${if (filteredHistory.size == 1) "scan" else "scans"}",
-                                        fontSize = 13.sp,
-                                        color = Color(0xFF757575)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Delete (only when selecting)
-                        if (isSelectionMode) {
-                            IconButton(
-                                onClick = { if (selectedItems.isNotEmpty()) showDeleteDialog = true },
-                                enabled = selectedItems.isNotEmpty()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = if (selectedItems.isNotEmpty())
-                                        Color(0xFFEF5350)
-                                    else
-                                        Color(0xFFBDBDBD),
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
-
-                        // Reload on far right
-                        IconButton(
-                            onClick = {
-                                isRefreshing = true
-                                errorMessage = null
-                                loadScanHistory(
-                                    onSuccess = { scans ->
-                                        scanHistory = scans
-                                        isRefreshing = false
-                                    },
-                                    onFailure = { error ->
-                                        errorMessage = error.message
-                                        isRefreshing = false
-                                    }
-                                )
-                            }
-                        ) {
-                            if (isRefreshing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    color = Color(0xFF2E7D32),
-                                    strokeWidth = 2.dp
-                                )
                             } else {
                                 Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Reload",
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = "History",
                                     tint = Color(0xFF2E7D32),
                                     modifier = Modifier.size(24.dp)
                                 )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Scan History",
+                                        fontSize = 22.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1B5E20)
+                                    )
+                                    if (!isLoading && filteredHistory.isNotEmpty()) {
+                                        Text(
+                                            text = "${filteredHistory.size} ${if (filteredHistory.size == 1) "scan" else "scans"}",
+                                            fontSize = 13.sp,
+                                            color = Color(0xFF757575)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isSelectionMode) {
+                                IconButton(
+                                    onClick = { if (selectedItems.isNotEmpty()) showDeleteDialog = true },
+                                    enabled = selectedItems.isNotEmpty()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete",
+                                        tint = if (selectedItems.isNotEmpty())
+                                            Color(0xFFEF5350)
+                                        else
+                                            Color(0xFFBDBDBD),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    isRefreshing = true
+                                    errorMessage = null
+                                    loadScanHistory(
+                                        onSuccess = { scans ->
+                                            scanHistory = scans
+                                            isRefreshing = false
+                                        },
+                                        onFailure = { error ->
+                                            errorMessage = error.message
+                                            isRefreshing = false
+                                        }
+                                    )
+                                }
+                            ) {
+                                if (isRefreshing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color(0xFF2E7D32),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Reload",
+                                        tint = Color(0xFF2E7D32),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                // ── Second row: Sort + Filter (full width, less cramped) ──
-                if (!isLoading && scanHistory.isNotEmpty() && !isSelectionMode) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Sort
-                        Box(modifier = Modifier.weight(1f)) {
-                            OutlinedCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.outlinedCardColors(
-                                    containerColor = Color(0xFFF5F7FA)
-                                ),
-                                border = CardDefaults.outlinedCardBorder().copy(
-                                    width = 1.dp,
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(Color(0xFF2E7D32), Color(0xFF388E3C))
-                                    )
-                                ),
-                                onClick = { showSortMenu = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                    if (!isLoading && scanHistory.isNotEmpty() && !isSelectionMode) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                OutlinedCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.outlinedCardColors(
+                                        containerColor = Color(0xFFF5F7FA)
+                                    ),
+                                    border = CardDefaults.outlinedCardBorder().copy(
+                                        width = 1.dp,
+                                        brush = Brush.linearGradient(
+                                            colors = listOf(Color(0xFF2E7D32), Color(0xFF388E3C))
+                                        )
+                                    ),
+                                    onClick = { showSortMenu = true }
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Sort,
-                                        contentDescription = null,
-                                        tint = Color(0xFF2E7D32),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = sortOption,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF1B5E20),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Sort,
+                                            contentDescription = null,
+                                            tint = Color(0xFF2E7D32),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = sortOption,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF1B5E20),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
-                            }
 
-                            DropdownMenu(
-                                expanded = showSortMenu,
-                                onDismissRequest = { showSortMenu = false }
-                            ) {
-                                listOf(
-                                    "Newest First",
-                                    "Oldest First",
-                                    "Highest Confidence",
-                                    "Lowest Confidence"
-                                ).forEach { option ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = option,
-                                                fontWeight = if (option == sortOption)
-                                                    FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        },
-                                        onClick = {
-                                            sortOption = option
-                                            showSortMenu = false
-                                        },
-                                        leadingIcon = if (option == sortOption) {
-                                            {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFF2E7D32)
+                                DropdownMenu(
+                                    expanded = showSortMenu,
+                                    onDismissRequest = { showSortMenu = false }
+                                ) {
+                                    listOf(
+                                        "Newest First",
+                                        "Oldest First",
+                                        "Highest Confidence",
+                                        "Lowest Confidence"
+                                    ).forEach { option ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = option,
+                                                    fontWeight = if (option == sortOption)
+                                                        FontWeight.Bold else FontWeight.Normal
                                                 )
-                                            }
-                                        } else null
-                                    )
+                                            },
+                                            onClick = {
+                                                sortOption = option
+                                                showSortMenu = false
+                                            },
+                                            leadingIcon = if (option == sortOption) {
+                                                {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF2E7D32)
+                                                    )
+                                                }
+                                            } else null
+                                        )
+                                    }
                                 }
                             }
-                        }
 
-                        // Filter
-                        Box(modifier = Modifier.weight(1f)) {
-                            val hasFilter = filterDisease != "All Diseases"
+                            Box(modifier = Modifier.weight(1f)) {
+                                val hasFilter = filterDisease != "All Diseases"
 
-                            OutlinedCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.outlinedCardColors(
-                                    containerColor = if (hasFilter)
-                                        Color(0xFFFFF9C4)
-                                    else
-                                        Color(0xFFF5F7FA)
-                                ),
-                                border = CardDefaults.outlinedCardBorder().copy(
-                                    width = if (hasFilter) 2.dp else 1.dp,
-                                    brush = Brush.linearGradient(
-                                        colors = if (hasFilter)
-                                            listOf(Color(0xFFFBC02D), Color(0xFFF9A825))
+                                OutlinedCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.outlinedCardColors(
+                                        containerColor = if (hasFilter)
+                                            Color(0xFFFFF9C4)
                                         else
-                                            listOf(Color(0xFF2E7D32), Color(0xFF388E3C))
-                                    )
-                                ),
-                                onClick = { showFilterMenu = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                                            Color(0xFFF5F7FA)
+                                    ),
+                                    border = CardDefaults.outlinedCardBorder().copy(
+                                        width = if (hasFilter) 2.dp else 1.dp,
+                                        brush = Brush.linearGradient(
+                                            colors = if (hasFilter)
+                                                listOf(Color(0xFFFBC02D), Color(0xFFF9A825))
+                                            else
+                                                listOf(Color(0xFF2E7D32), Color(0xFF388E3C))
+                                        )
+                                    ),
+                                    onClick = { showFilterMenu = true }
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.FilterList,
-                                        contentDescription = null,
-                                        tint = if (hasFilter) Color(0xFF1B5E20) else Color(0xFF2E7D32),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = if (!hasFilter) "Filter" else filterDisease,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF1B5E20),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FilterList,
+                                            contentDescription = null,
+                                            tint = if (hasFilter) Color(0xFF1B5E20) else Color(0xFF2E7D32),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (!hasFilter) "Filter" else filterDisease,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF1B5E20),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
-                            }
 
-                            DropdownMenu(
-                                expanded = showFilterMenu,
-                                onDismissRequest = { showFilterMenu = false }
-                            ) {
-                                val diseases = listOf("All Diseases") +
-                                        scanHistory.map { it.diseaseName }.distinct().sorted()
+                                DropdownMenu(
+                                    expanded = showFilterMenu,
+                                    onDismissRequest = { showFilterMenu = false }
+                                ) {
+                                    val diseases = listOf("All Diseases") +
+                                            scanHistory.map { it.diseaseName }.distinct().sorted()
 
-                                diseases.forEach { disease ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = disease,
-                                                fontWeight = if (disease == filterDisease)
-                                                    FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        },
-                                        onClick = {
-                                            filterDisease = disease
-                                            showFilterMenu = false
-                                        },
-                                        leadingIcon = if (disease == filterDisease) {
-                                            {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFF2E7D32)
+                                    diseases.forEach { disease ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = disease,
+                                                    fontWeight = if (disease == filterDisease)
+                                                        FontWeight.Bold else FontWeight.Normal
                                                 )
-                                            }
-                                        } else null
-                                    )
+                                            },
+                                            onClick = {
+                                                filterDisease = disease
+                                                showFilterMenu = false
+                                            },
+                                            leadingIcon = if (disease == filterDisease) {
+                                                {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF2E7D32)
+                                                    )
+                                                }
+                                            } else null
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -490,7 +491,6 @@ fun HistoryContent(
                 }
             }
         }
-
 
         // Content
         Box(modifier = Modifier.fillMaxSize()) {
@@ -643,7 +643,8 @@ fun HistoryContent(
                                             selectedItems + scan.id
                                         }
                                     } else {
-                                        selectedScan = scan
+                                        // ✅ USE CALLBACK TO SHOW FULLSCREEN DETAIL
+                                        onNavigateToDetail(scan)
                                     }
                                 },
                                 onLongClick = {
@@ -654,16 +655,14 @@ fun HistoryContent(
                                 }
                             )
                         }
-
-                        item {
-                            Spacer(modifier = Modifier.height(100.dp)) // Extra bottom padding for FAB
-                        }
                     }
                 }
             }
         }
     }
 }
+
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

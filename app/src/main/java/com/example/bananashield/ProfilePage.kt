@@ -1,6 +1,7 @@
 package com.example.bananashield
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,14 +30,13 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfilePage(
     paddingValues: PaddingValues,
-    onNavigateBack: () -> Unit,
-    totalScans: Int = 0,        // pass real values from caller
-    thisWeekScans: Int = 0      // pass real values from caller
+    onNavigateBack: () -> Unit
 ) {
     val auth = Firebase.auth
     val context = LocalContext.current
@@ -50,6 +51,18 @@ fun ProfilePage(
     var showEditProfile by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableStateOf(0) }
+
+    // ✅ Add scan history state
+    var scanHistory by remember { mutableStateOf<List<ScanHistory>>(emptyList()) }
+    var isLoadingScans by remember { mutableStateOf(true) }
+
+    val density = LocalDensity.current
+    val statusBarHeight = WindowInsets.statusBars.getTop(density) / density.density
+    val navigationBarHeight = WindowInsets.navigationBars.getBottom(density) / density.density
+
+    BackHandler(enabled = true) {
+        onNavigateBack()
+    }
 
     // Fetch user data from Firestore
     LaunchedEffect(currentUser?.uid, refreshTrigger) {
@@ -68,11 +81,40 @@ fun ProfilePage(
         }
     }
 
+    // ✅ Fetch scan history data
+    LaunchedEffect(refreshTrigger) {
+        isLoadingScans = true
+        ScanHistoryHelper.getUserScanHistory(
+            onSuccess = { scans ->
+                scanHistory = scans
+                isLoadingScans = false
+            },
+            onFailure = {
+                isLoadingScans = false
+            }
+        )
+    }
+
+    // ✅ Calculate statistics
+    val totalScans = scanHistory.size
+
+    // Calculate this week's scans
+    val calendar = Calendar.getInstance()
+    // Set to start of current week (Monday)
+    calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
+    calendar.set(Calendar.HOUR_OF_DAY, 0)
+    calendar.set(Calendar.MINUTE, 0)
+    calendar.set(Calendar.SECOND, 0)
+    calendar.set(Calendar.MILLISECOND, 0)
+    val weekStart = calendar.timeInMillis
+
+    val thisWeekScans = scanHistory.count { it.timestamp >= weekStart }
+
     if (showEditProfile) {
         EditProfilePage(
             onNavigateBack = {
                 showEditProfile = false
-                refreshTrigger++ // Refresh data when returning from edit
+                refreshTrigger++
             }
         )
     } else {
@@ -83,51 +125,54 @@ fun ProfilePage(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Header – consistent with Home/Settings
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = Color.White,
                 shadowElevation = 2.dp
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
+                Column {
+                    Spacer(modifier = Modifier.height(statusBarHeight.dp + 8.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
                     ) {
-                        IconButton(onClick = onNavigateBack) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onNavigateBack) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = Color(0xFF2E7D32)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
                             Icon(
-                                imageVector = Icons.Default.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color(0xFF2E7D32)
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Profile",
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(24.dp)
                             )
-                        }
 
-                        Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
 
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Profile",
-                            tint = Color(0xFF2E7D32),
-                            modifier = Modifier.size(24.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Column {
-                            Text(
-                                text = "Profile",
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1B5E20)
-                            )
-                            Text(
-                                text = "View and manage your account",
-                                fontSize = 13.sp,
-                                color = Color(0xFF757575)
-                            )
+                            Column {
+                                Text(
+                                    text = "Profile",
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1B5E20)
+                                )
+                                Text(
+                                    text = "View and manage your account",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF757575)
+                                )
+                            }
                         }
                     }
                 }
@@ -135,7 +180,6 @@ fun ProfilePage(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Profile main card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -150,13 +194,12 @@ fun ProfilePage(
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Avatar + edit
                     Box(contentAlignment = Alignment.BottomEnd) {
                         Box(
                             modifier = Modifier
                                 .size(100.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFFFF9C4)),
+                                .background(Color(0xFFE8F5E9)),
                             contentAlignment = Alignment.Center
                         ) {
                             val profileImageUrl = userData?.get("profileImageUrl") as? String
@@ -216,28 +259,41 @@ fun ProfilePage(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Stats: Total Scans + This Week's Scans
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        ProfileStatCard(
-                            value = totalScans.toString(),
-                            label = "Total Scans",
-                            modifier = Modifier.weight(1f)
-                        )
-                        ProfileStatCard(
-                            value = thisWeekScans.toString(),
-                            label = "This Week's Scans",
-                            modifier = Modifier.weight(1f)
-                        )
+                    // ✅ Display actual scan statistics
+                    if (isLoadingScans) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(90.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color(0xFF2E7D32),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ProfileStatCard(
+                                value = totalScans.toString(),
+                                label = "Total Scans",
+                                modifier = Modifier.weight(1f)
+                            )
+                            ProfileStatCard(
+                                value = thisWeekScans.toString(),
+                                label = "This Week's Scans",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Account info
             Text(
                 text = "Account Information",
                 fontSize = 16.sp,
@@ -290,7 +346,6 @@ fun ProfilePage(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Danger / actions
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -342,7 +397,7 @@ fun ProfilePage(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height((navigationBarHeight + 16).dp))
         }
 
         if (showLogoutDialog) {
@@ -357,8 +412,6 @@ fun ProfilePage(
         }
     }
 }
-
-// ───────── helper composables ─────────
 
 @Composable
 fun ProfileStatCard(
@@ -499,7 +552,8 @@ fun LogoutConfirmationDialog(
                 Text(
                     text = "Log Out",
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
                 )
             }
         },

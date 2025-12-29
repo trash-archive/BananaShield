@@ -51,6 +51,9 @@ object ScanHistoryHelper {
     private const val COLLECTION_SCANS = "scan_history"
     private const val TAG = "ScanHistoryHelper"
 
+    // ✅ ADDED: Track which scans already have notifications to prevent duplicates
+    private val notifiedScans = mutableSetOf<String>()
+
     fun saveScanResult(
         bitmap: Bitmap,
         classification: Classification,
@@ -160,17 +163,25 @@ object ScanHistoryHelper {
                     db.collection(COLLECTION_SCANS)
                         .add(scanData)
                         .addOnSuccessListener { documentReference ->
-                            Log.d(TAG, "✅ Scan saved with ID: ${documentReference.id}")
+                            val scanId = documentReference.id
+                            Log.d(TAG, "✅ Scan saved with ID: $scanId")
 
-                            // 🔔 CREATE NOTIFICATION AFTER SUCCESSFUL SAVE
-                            NotificationHelper.notifyScanComplete(
-                                userId = currentUser.uid,
-                                scanId = documentReference.id,
-                                diseaseName = classification.diseaseInfo.name,  // ✅ FIXED
-                                confidence = classification.confidence
-                            )
+                            // ✅ FIXED: Only notify once using a tracking set (no delay needed)
+                            if (!notifiedScans.contains(scanId)) {
+                                notifiedScans.add(scanId)
 
-                            onSuccess(documentReference.id)
+                                Log.d(TAG, "🔔 Creating notification for scan: $scanId")
+                                NotificationHelper.notifyScanComplete(
+                                    userId = currentUser.uid,
+                                    scanId = scanId,
+                                    diseaseName = classification.diseaseInfo.name,
+                                    confidence = classification.confidence
+                                )
+                            } else {
+                                Log.d(TAG, "⚠️ Notification already created for scanId: $scanId")
+                            }
+
+                            onSuccess(scanId)
                         }
                         .addOnFailureListener { e ->
                             Log.e(TAG, "❌ Failed to save to Firestore: ${e.message}")
@@ -241,6 +252,60 @@ object ScanHistoryHelper {
             .addOnFailureListener { e ->
                 Log.e(TAG, "❌ Failed to fetch history: ${e.message}")
                 onFailure(e)
+            }
+    }
+
+    // ✅ Get single scan history by ID (for deep linking from notifications)
+    fun getScanHistoryById(
+        scanId: String,
+        onSuccess: (ScanHistory) -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        Log.d(TAG, "📥 Fetching scan with ID: $scanId")
+
+        db.collection(COLLECTION_SCANS)
+            .document(scanId)
+            .get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    try {
+                        val scanHistory = ScanHistory(
+                            id = document.id,
+                            userId = document.getString("userId") ?: "",
+                            userName = document.getString("userName") ?: "",
+                            userEmail = document.getString("userEmail") ?: "",
+                            diseaseName = document.getString("diseaseName") ?: "",
+                            scientificName = document.getString("scientificName") ?: "",
+                            diseaseType = document.getString("diseaseType") ?: "",
+                            confidence = document.getDouble("confidence")?.toFloat() ?: 0f,
+                            confidenceLevel = document.getString("confidenceLevel") ?: "",
+                            severity = document.getString("severity") ?: "",
+                            symptoms = document.get("symptoms") as? List<String> ?: emptyList(),
+                            causes = document.get("causes") as? List<String> ?: emptyList(),
+                            treatmentSteps = document.get("treatmentSteps") as? List<Map<String, String>> ?: emptyList(),
+                            safetyNotes = document.get("safetyNotes") as? List<String> ?: emptyList(),
+                            preventiveMeasures = document.get("preventiveMeasures") as? List<Map<String, Any>> ?: emptyList(),
+                            timestamp = document.getLong("timestamp") ?: 0L,
+                            imageUrl = document.getString("imageUrl") ?: "",
+                            location = document.getString("location") ?: "",
+                            notes = document.getString("notes") ?: ""
+                        )
+
+                        Log.d(TAG, "✅ Successfully fetched scan: ${scanHistory.diseaseName}")
+                        onSuccess(scanHistory)
+
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Error parsing scan document: ${e.message}")
+                        onFailure(e)
+                    }
+                } else {
+                    Log.e(TAG, "❌ Scan document not found: $scanId")
+                    onFailure(Exception("Scan not found"))
+                }
+            }
+            .addOnFailureListener { exception ->
+                Log.e(TAG, "❌ Failed to fetch scan: ${exception.message}")
+                onFailure(exception)
             }
     }
 

@@ -1,5 +1,11 @@
 package com.example.bananashield
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,11 +25,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
@@ -35,6 +44,7 @@ import java.util.*
 // DATA CLASSES
 // ============================================================================
 
+// ✅ FIXED: Changed isRead to read (Firestore compatible)
 data class AppNotification(
     val id: String = "",
     val userId: String = "",
@@ -42,7 +52,7 @@ data class AppNotification(
     val title: String = "",
     val message: String = "",
     val timestamp: Long = System.currentTimeMillis(),
-    val isRead: Boolean = false,
+    val read: Boolean = false,  // ✅ Changed from isRead
     val relatedId: String? = null,
     val actionUrl: String? = null,
     val priority: NotificationPriority = NotificationPriority.NORMAL
@@ -72,40 +82,43 @@ enum class NotificationPriority {
 @Composable
 fun NotificationContent(
     paddingValues: PaddingValues,
-    onNavigateBack: (() -> Unit)? = null
+    onNavigateBack: (() -> Unit)? = null,
+    onNavigateToScanDetail: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val auth = Firebase.auth
     val currentUser = auth.currentUser
-
     var notifications by remember { mutableStateOf<List<AppNotification>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var selectedFilter by remember { mutableStateOf("All") }
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
     var showClearAllDialog by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val statusBarHeight = WindowInsets.statusBars.getTop(density) / density.density
 
-    // Handle back button press
     BackHandler(enabled = true) {
         onNavigateBack?.invoke()
     }
 
-    LaunchedEffect(currentUser?.uid) {
+    // ✅ FIXED: Use real-time listener instead of one-time get
+    DisposableEffect(currentUser?.uid) {
+        var listenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
         currentUser?.uid?.let { userId ->
-            NotificationHelper.getUserNotifications(
+            listenerRegistration = NotificationHelper.listenToNotifications(
                 userId = userId,
-                onSuccess = { notifs ->
+                onUpdate = { notifs ->
                     notifications = notifs
-                    isLoading = false
-                },
-                onFailure = {
                     isLoading = false
                 }
             )
         }
+        onDispose {
+            listenerRegistration?.remove()
+        }
     }
 
     val filteredNotifications = when (selectedFilter) {
-        "Unread" -> notifications.filter { !it.isRead }
+        "Unread" -> notifications.filter { !it.read }  // ✅ Changed from isRead
         "Scan Results" -> notifications.filter {
             it.type == NotificationType.SCAN_COMPLETE ||
                     it.type == NotificationType.DISEASE_DETECTED ||
@@ -119,8 +132,9 @@ fun NotificationContent(
         else -> notifications
     }
 
-    val unreadCount = notifications.count { !it.isRead }
+    val unreadCount = notifications.count { !it.read }  // ✅ Changed from isRead
 
+    // Delete single notification dialog
     showDeleteDialog?.let { notificationId ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
@@ -137,7 +151,6 @@ fun NotificationContent(
                 Button(
                     onClick = {
                         NotificationHelper.deleteNotification(notificationId)
-                        notifications = notifications.filter { it.id != notificationId }
                         showDeleteDialog = null
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -156,6 +169,7 @@ fun NotificationContent(
         )
     }
 
+    // Clear all notifications dialog
     if (showClearAllDialog) {
         AlertDialog(
             onDismissRequest = { showClearAllDialog = false },
@@ -173,7 +187,6 @@ fun NotificationContent(
                     onClick = {
                         currentUser?.uid?.let { userId ->
                             NotificationHelper.clearAllNotifications(userId)
-                            notifications = emptyList()
                         }
                         showClearAllDialog = false
                     },
@@ -186,7 +199,7 @@ fun NotificationContent(
             },
             dismissButton = {
                 TextButton(onClick = { showClearAllDialog = false }) {
-                    Text("Cancel", color = Color(0xFF757575))
+                    Text("Cancel", color = Color(0xFF9E9E9E))
                 }
             },
             shape = RoundedCornerShape(16.dp)
@@ -199,142 +212,143 @@ fun NotificationContent(
             .background(Color(0xFFF5F7FA))
             .padding(paddingValues)
     ) {
+        // TOP BAR WITH STATUS BAR PADDING
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = Color.White,
             shadowElevation = 2.dp
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+            Column {
+                Spacer(modifier = Modifier.height(statusBarHeight.dp))
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Notifications,
-                        contentDescription = null,
-                        tint = Color(0xFF2E7D32),
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Notifications",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1B5E20)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(28.dp)
                         )
-                        if (unreadCount > 0) {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "$unreadCount unread",
-                                fontSize = 13.sp,
-                                color = Color(0xFF757575)
+                                text = "Notifications",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1B5E20)
                             )
-                        }
-                    }
-
-                    if (notifications.isNotEmpty()) {
-                        var showMenu by remember { mutableStateOf(false) }
-
-                        Box {
-                            IconButton(onClick = { showMenu = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "More options",
-                                    tint = Color(0xFF757575)
+                            if (unreadCount > 0) {
+                                Text(
+                                    text = "$unreadCount unread",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF757575)
                                 )
                             }
+                        }
 
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
-                            ) {
-                                if (unreadCount > 0) {
+                        if (notifications.isNotEmpty()) {
+                            var showMenu by remember { mutableStateOf(false) }
+                            Box {
+                                IconButton(onClick = { showMenu = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "More options",
+                                        tint = Color(0xFF757575)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false }
+                                ) {
+                                    if (unreadCount > 0) {
+                                        DropdownMenuItem(
+                                            text = { Text("Mark all as read") },
+                                            onClick = {
+                                                NotificationHelper.markAllAsRead(currentUser?.uid ?: "")
+                                                showMenu = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Default.DoneAll,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF2E7D32)
+                                                )
+                                            }
+                                        )
+                                    }
                                     DropdownMenuItem(
-                                        text = { Text("Mark all as read") },
+                                        text = { Text("Clear all", color = Color(0xFFEF5350)) },
                                         onClick = {
-                                            NotificationHelper.markAllAsRead(currentUser?.uid ?: "")
-                                            notifications = notifications.map { it.copy(isRead = true) }
+                                            showClearAllDialog = true
                                             showMenu = false
                                         },
                                         leadingIcon = {
                                             Icon(
-                                                Icons.Default.DoneAll,
+                                                Icons.Default.DeleteSweep,
                                                 contentDescription = null,
-                                                tint = Color(0xFF2E7D32)
+                                                tint = Color(0xFFEF5350)
                                             )
                                         }
                                     )
                                 }
-                                DropdownMenuItem(
-                                    text = { Text("Clear all", color = Color(0xFFEF5350)) },
-                                    onClick = {
-                                        showClearAllDialog = true
-                                        showMenu = false
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.DeleteSweep,
-                                            contentDescription = null,
-                                            tint = Color(0xFFEF5350)
-                                        )
-                                    }
-                                )
                             }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(horizontal = 0.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val filters = listOf("All", "Unread", "Scan Results", "Messages", "Tips")
-
-                    items(filters.size) { index ->
-                        val filter = filters[index]
-                        val count = when (filter) {
-                            "All" -> notifications.size
-                            "Unread" -> unreadCount
-                            "Scan Results" -> notifications.count {
-                                it.type == NotificationType.SCAN_COMPLETE ||
-                                        it.type == NotificationType.DISEASE_DETECTED ||
-                                        it.type == NotificationType.LOW_CONFIDENCE_WARNING
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 0.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val filters = listOf("All", "Unread", "Scan Results", "Messages", "Tips")
+                        items(filters.size) { index ->
+                            val filter = filters[index]
+                            val count = when (filter) {
+                                "All" -> notifications.size
+                                "Unread" -> unreadCount
+                                "Scan Results" -> notifications.count {
+                                    it.type == NotificationType.SCAN_COMPLETE ||
+                                            it.type == NotificationType.DISEASE_DETECTED ||
+                                            it.type == NotificationType.LOW_CONFIDENCE_WARNING
+                                }
+                                "Messages" -> notifications.count { it.type == NotificationType.ADMIN_REPLY }
+                                "Tips" -> notifications.count {
+                                    it.type == NotificationType.HEALTH_TIP ||
+                                            it.type == NotificationType.WEEKLY_REPORT
+                                }
+                                else -> 0
                             }
-                            "Messages" -> notifications.count { it.type == NotificationType.ADMIN_REPLY }
-                            "Tips" -> notifications.count {
-                                it.type == NotificationType.HEALTH_TIP ||
-                                        it.type == NotificationType.WEEKLY_REPORT
-                            }
-                            else -> 0
+
+                            FilterChip(
+                                selected = selectedFilter == filter,
+                                onClick = { selectedFilter = filter },
+                                label = {
+                                    Text(
+                                        text = if (count > 0) "$filter ($count)" else filter,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selectedFilter == filter) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF2E7D32),
+                                    selectedLabelColor = Color.White,
+                                    containerColor = Color(0xFFE8F5E9),
+                                    labelColor = Color(0xFF2E7D32)
+                                ),
+                                modifier = Modifier.height(36.dp)
+                            )
                         }
-
-                        FilterChip(
-                            selected = selectedFilter == filter,
-                            onClick = { selectedFilter = filter },
-                            label = {
-                                Text(
-                                    text = if (count > 0) "$filter ($count)" else filter,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (selectedFilter == filter) FontWeight.SemiBold else FontWeight.Normal
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF2E7D32),
-                                selectedLabelColor = Color.White,
-                                containerColor = Color(0xFFE8F5E9),
-                                labelColor = Color(0xFF2E7D32)
-                            ),
-                            modifier = Modifier.height(36.dp)
-                        )
                     }
                 }
             }
         }
 
+        // Content area
         if (isLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -356,11 +370,18 @@ fun NotificationContent(
                     NotificationItem(
                         notification = notification,
                         onClick = {
-                            if (!notification.isRead) {
+                            android.util.Log.d("NotificationContent", "🔔 Clicked notification: ${notification.id}, read: ${notification.read}")
+                            if (!notification.read) {  // ✅ Changed from isRead
+                                android.util.Log.d("NotificationContent", "✅ Marking as read: ${notification.id}")
                                 NotificationHelper.markAsRead(notification.id)
-                                notifications = notifications.map {
-                                    if (it.id == notification.id) it.copy(isRead = true) else it
-                                }
+                            }
+
+                            // ✅ Navigate immediately (no delay needed - real-time listener handles UI)
+                            if (notification.relatedId != null &&
+                                (notification.type == NotificationType.SCAN_COMPLETE ||
+                                        notification.type == NotificationType.DISEASE_DETECTED ||
+                                        notification.type == NotificationType.LOW_CONFIDENCE_WARNING)) {
+                                onNavigateToScanDetail(notification.relatedId)
                             }
                         },
                         onDelete = {
@@ -422,13 +443,13 @@ fun NotificationItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick),
+            .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (!notification.isRead) Color.White else Color(0xFFFAFAFA)
+            containerColor = if (!notification.read) Color.White else Color(0xFFF5F5F5)  // ✅ Changed from isRead
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (!notification.isRead) 2.dp else 1.dp
+            defaultElevation = if (!notification.read) 2.dp else 1.dp  // ✅ Changed from isRead
         )
     ) {
         Row(
@@ -439,13 +460,13 @@ fun NotificationItem(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(bgColor),
+                    .background(if (!notification.read) bgColor else bgColor.copy(alpha = 0.6f)),  // ✅ Changed from isRead
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = iconColor,
+                    tint = if (!notification.read) iconColor else iconColor.copy(alpha = 0.7f),  // ✅ Changed from isRead
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -459,13 +480,14 @@ fun NotificationItem(
                     Text(
                         text = notification.title,
                         fontSize = 15.sp,
-                        fontWeight = if (!notification.isRead) FontWeight.Bold else FontWeight.SemiBold,
-                        color = Color(0xFF1B5E20),
+                        fontWeight = if (!notification.read) FontWeight.Bold else FontWeight.SemiBold,  // ✅ Changed from isRead
+                        color = if (!notification.read) Color(0xFF1B5E20) else Color(0xFF757575),  // ✅ Changed from isRead
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    if (!notification.isRead) {
+
+                    if (!notification.read) {  // ✅ Changed from isRead
                         Spacer(modifier = Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
@@ -481,7 +503,7 @@ fun NotificationItem(
                 Text(
                     text = notification.message,
                     fontSize = 13.sp,
-                    color = Color(0xFF757575),
+                    color = if (!notification.read) Color(0xFF757575) else Color(0xFF9E9E9E),  // ✅ Changed from isRead
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 18.sp
@@ -577,35 +599,41 @@ fun EmptyNotificationsView(filter: String) {
 // ============================================================================
 // NOTIFICATION HELPER
 // ============================================================================
-
 object NotificationHelper {
     private val db = Firebase.firestore
     private const val COLLECTION = "notifications"
 
-    fun getUserNotifications(
+    // ✅ CRITICAL FIX: In-memory cache to prevent race condition duplicates
+    private val pendingNotifications = mutableSetOf<String>()
+    private val notificationLock = Any()
+
+    // ✅ FIXED: Real-time listener for notifications
+    fun listenToNotifications(
         userId: String,
-        onSuccess: (List<AppNotification>) -> Unit,
-        onFailure: (Exception) -> Unit
-    ) {
-        db.collection(COLLECTION)
+        onUpdate: (List<AppNotification>) -> Unit
+    ): com.google.firebase.firestore.ListenerRegistration {
+        return db.collection(COLLECTION)
             .whereEqualTo("userId", userId)
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(50)
-            .get()
-            .addOnSuccessListener { snapshot ->
-                val notifications = snapshot.documents.mapNotNull { doc ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("NotificationHelper", "Listen failed", error)
+                    onUpdate(emptyList())
+                    return@addSnapshotListener
+                }
+
+                val notifications = snapshot?.documents?.mapNotNull { doc ->
                     try {
                         doc.toObject(AppNotification::class.java)?.copy(id = doc.id)
                     } catch (e: Exception) {
                         android.util.Log.e("NotificationHelper", "Error parsing notification", e)
                         null
                     }
-                }
-                onSuccess(notifications)
-            }
-            .addOnFailureListener { exception ->
-                android.util.Log.e("NotificationHelper", "Failed to get notifications", exception)
-                onFailure(exception)
+                } ?: emptyList()
+
+                android.util.Log.d("NotificationHelper", "✅ Loaded ${notifications.size} notifications")
+                onUpdate(notifications)
             }
     }
 
@@ -615,18 +643,19 @@ object NotificationHelper {
     ) {
         db.collection(COLLECTION)
             .whereEqualTo("userId", userId)
-            .whereEqualTo("isRead", false)
+            .whereEqualTo("read", false)
             .get()
             .addOnSuccessListener { snapshot ->
+                android.util.Log.d("NotificationHelper", "Unread count: ${snapshot.size()}")
                 onSuccess(snapshot.size())
             }
-            .addOnFailureListener {
-                android.util.Log.e("NotificationHelper", "Failed to get unread count")
+            .addOnFailureListener { e ->
+                android.util.Log.e("NotificationHelper", "Failed to get unread count", e)
                 onSuccess(0)
             }
     }
 
-    fun createNotification(
+    private fun createNotification(
         userId: String,
         type: NotificationType,
         title: String,
@@ -635,16 +664,16 @@ object NotificationHelper {
         actionUrl: String? = null,
         priority: NotificationPriority = NotificationPriority.NORMAL
     ) {
-        val notification = AppNotification(
-            userId = userId,
-            type = type,
-            title = title,
-            message = message,
-            relatedId = relatedId,
-            actionUrl = actionUrl,
-            priority = priority,
-            timestamp = System.currentTimeMillis(),
-            isRead = false
+        val notification = hashMapOf(
+            "userId" to userId,
+            "type" to type.name,
+            "title" to title,
+            "message" to message,
+            "relatedId" to relatedId,
+            "actionUrl" to actionUrl,
+            "priority" to priority.name,
+            "timestamp" to System.currentTimeMillis(),
+            "read" to false
         )
 
         db.collection(COLLECTION)
@@ -658,34 +687,45 @@ object NotificationHelper {
     }
 
     fun markAsRead(notificationId: String) {
+        android.util.Log.d("NotificationHelper", "📝 Marking as read: $notificationId")
         db.collection(COLLECTION)
             .document(notificationId)
-            .update("isRead", true)
+            .update("read", true)
             .addOnSuccessListener {
-                android.util.Log.d("NotificationHelper", "Marked as read: $notificationId")
+                android.util.Log.d("NotificationHelper", "✅ Successfully marked as read: $notificationId")
             }
             .addOnFailureListener { e ->
-                android.util.Log.e("NotificationHelper", "Failed to mark as read", e)
+                android.util.Log.e("NotificationHelper", "❌ Failed to mark as read", e)
             }
     }
 
     fun markAllAsRead(userId: String) {
+        android.util.Log.d("NotificationHelper", "📝 Marking all as read for user: $userId")
         db.collection(COLLECTION)
             .whereEqualTo("userId", userId)
-            .whereEqualTo("isRead", false)
+            .whereEqualTo("read", false)
             .get()
             .addOnSuccessListener { snapshot ->
+                if (snapshot.isEmpty) {
+                    android.util.Log.d("NotificationHelper", "No unread notifications to mark")
+                    return@addOnSuccessListener
+                }
+
                 val batch = db.batch()
                 snapshot.documents.forEach { doc ->
-                    batch.update(doc.reference, "isRead", true)
+                    batch.update(doc.reference, "read", true)
                 }
+
                 batch.commit()
                     .addOnSuccessListener {
-                        android.util.Log.d("NotificationHelper", "All notifications marked as read")
+                        android.util.Log.d("NotificationHelper", "✅ Marked ${snapshot.size()} notifications as read")
+                    }
+                    .addOnFailureListener { e ->
+                        android.util.Log.e("NotificationHelper", "❌ Failed to mark all as read", e)
                     }
             }
             .addOnFailureListener { e ->
-                android.util.Log.e("NotificationHelper", "Failed to mark all as read", e)
+                android.util.Log.e("NotificationHelper", "❌ Failed to query notifications", e)
             }
     }
 
@@ -694,10 +734,10 @@ object NotificationHelper {
             .document(notificationId)
             .delete()
             .addOnSuccessListener {
-                android.util.Log.d("NotificationHelper", "Notification deleted: $notificationId")
+                android.util.Log.d("NotificationHelper", "✅ Notification deleted: $notificationId")
             }
             .addOnFailureListener { e ->
-                android.util.Log.e("NotificationHelper", "Failed to delete notification", e)
+                android.util.Log.e("NotificationHelper", "❌ Failed to delete notification", e)
             }
     }
 
@@ -710,60 +750,111 @@ object NotificationHelper {
                 snapshot.documents.forEach { doc ->
                     batch.delete(doc.reference)
                 }
+
                 batch.commit()
                     .addOnSuccessListener {
-                        android.util.Log.d("NotificationHelper", "All notifications cleared")
+                        android.util.Log.d("NotificationHelper", "✅ All notifications cleared")
                     }
-            }
-            .addOnFailureListener { e ->
-                android.util.Log.e("NotificationHelper", "Failed to clear all notifications", e)
+                    .addOnFailureListener { e ->
+                        android.util.Log.e("NotificationHelper", "❌ Failed to clear all notifications", e)
+                    }
             }
     }
 
+    // ✅ CRITICAL FIX: Synchronize access with in-memory cache
     fun notifyScanComplete(
         userId: String,
         scanId: String,
         diseaseName: String,
         confidence: Float
     ) {
-        val isHealthy = diseaseName.contains("Healthy", ignoreCase = true)
+        // ✅ Step 1: Check in-memory cache FIRST (instant check)
+        synchronized(notificationLock) {
+            if (pendingNotifications.contains(scanId)) {
+                android.util.Log.d("NotificationHelper", "⚠️ Notification already being created for scanId: $scanId (in-memory check)")
+                return
+            }
 
-        val (type, title, message, priority) = when {
-            !isHealthy && confidence >= 0.6f -> {
-                Tuple4(
-                    NotificationType.DISEASE_DETECTED,
-                    "Disease Detected!",
-                    "$diseaseName detected with ${(confidence * 100).toInt()}% confidence. Check treatment recommendations.",
-                    NotificationPriority.HIGH
-                )
-            }
-            confidence < 0.6f -> {
-                Tuple4(
-                    NotificationType.LOW_CONFIDENCE_WARNING,
-                    "Low Confidence Scan",
-                    "Scan confidence is ${(confidence * 100).toInt()}%. Consider rescanning for better accuracy.",
-                    NotificationPriority.NORMAL
-                )
-            }
-            else -> {
-                Tuple4(
-                    NotificationType.SCAN_COMPLETE,
-                    "Scan Complete",
-                    "Your plant scan is complete. Result: $diseaseName",
-                    NotificationPriority.NORMAL
-                )
-            }
+            // ✅ Mark as pending immediately
+            pendingNotifications.add(scanId)
+            android.util.Log.d("NotificationHelper", "🔒 Locked scanId: $scanId in memory")
         }
 
-        createNotification(
-            userId = userId,
-            type = type,
-            title = title,
-            message = message,
-            relatedId = scanId,
-            actionUrl = "history/$scanId",
-            priority = priority
-        )
+        // ✅ Step 2: Double-check with Firestore (async check)
+        android.util.Log.d("NotificationHelper", "🔍 Checking Firestore for existing notification: scanId=$scanId")
+
+        db.collection(COLLECTION)
+            .whereEqualTo("userId", userId)
+            .whereEqualTo("relatedId", scanId)
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.isEmpty) {
+                    android.util.Log.d("NotificationHelper", "✅ No existing notification in Firestore, creating new one")
+
+                    val isHealthy = diseaseName.contains("Healthy", ignoreCase = true)
+                    val (type, title, message, priority) = when {
+                        !isHealthy && confidence >= 0.6f -> {
+                            Tuple4(
+                                NotificationType.DISEASE_DETECTED,
+                                "Disease Detected!",
+                                "$diseaseName detected with ${(confidence * 100).toInt()}% confidence. Check treatment recommendations.",
+                                NotificationPriority.HIGH
+                            )
+                        }
+                        confidence < 0.6f -> {
+                            Tuple4(
+                                NotificationType.LOW_CONFIDENCE_WARNING,
+                                "Low Confidence Scan",
+                                "Scan confidence is ${(confidence * 100).toInt()}%. Consider rescanning for better accuracy.",
+                                NotificationPriority.NORMAL
+                            )
+                        }
+                        else -> {
+                            Tuple4(
+                                NotificationType.SCAN_COMPLETE,
+                                "Scan Complete",
+                                "Your plant scan is complete. Result: $diseaseName",
+                                NotificationPriority.NORMAL
+                            )
+                        }
+                    }
+
+                    createNotification(
+                        userId = userId,
+                        type = type,
+                        title = title,
+                        message = message,
+                        relatedId = scanId,
+                        actionUrl = "history/$scanId",
+                        priority = priority
+                    )
+                } else {
+                    android.util.Log.d("NotificationHelper", "⚠️ Notification already exists in Firestore for scan: $scanId (found ${snapshot.size()} notifications)")
+
+                    // ✅ Remove from pending since we found it in Firestore
+                    synchronized(notificationLock) {
+                        pendingNotifications.remove(scanId)
+                    }
+                }
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("NotificationHelper", "❌ Failed to check for existing notifications", e)
+
+                // ✅ Remove from pending on error
+                synchronized(notificationLock) {
+                    pendingNotifications.remove(scanId)
+                }
+            }
+
+        // ✅ Step 3: Auto-cleanup after 10 seconds (in case Firestore fails silently)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            synchronized(notificationLock) {
+                if (pendingNotifications.remove(scanId)) {
+                    android.util.Log.d("NotificationHelper", "🧹 Auto-cleaned pending scanId: $scanId after 10s")
+                }
+            }
+        }, 10000) // 10 seconds cleanup timeout
     }
 
     fun notifyAdminReply(
@@ -806,14 +897,14 @@ object NotificationHelper {
             priority = NotificationPriority.LOW
         )
     }
-}
 
-private data class Tuple4<A, B, C, D>(
-    val first: A,
-    val second: B,
-    val third: C,
-    val fourth: D
-)
+    private data class Tuple4<A, B, C, D>(
+        val first: A,
+        val second: B,
+        val third: C,
+        val fourth: D
+    )
+}
 
 private fun formatTimeAgo(timestamp: Long): String {
     val now = System.currentTimeMillis()

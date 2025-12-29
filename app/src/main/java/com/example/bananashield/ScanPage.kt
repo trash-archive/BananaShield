@@ -18,8 +18,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,8 +32,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -91,6 +95,7 @@ fun ModernCameraScreen(
     var isAnalyzing by remember { mutableStateOf(false) }
     var showResults by remember { mutableStateOf(false) }
     var flashEnabled by remember { mutableStateOf(false) }
+    var showGuide by remember { mutableStateOf(false) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
 
@@ -228,6 +233,7 @@ fun ModernCameraScreen(
                     flashEnabled = flashEnabled,
                     onFlashToggle = { flashEnabled = !flashEnabled },
                     onBack = onNavigateBack,
+                    onShowGuide = { showGuide = true },
                     onCapture = {
                         imageCapture?.let { capture ->
                             capture.takePicture(
@@ -257,6 +263,11 @@ fun ModernCameraScreen(
                 )
             }
         }
+
+        // Guide Dialog
+        if (showGuide) {
+            ScanGuideDialog(onDismiss = { showGuide = false })
+        }
     }
 }
 
@@ -266,11 +277,14 @@ fun CameraMode(
     flashEnabled: Boolean,
     onFlashToggle: () -> Unit,
     onBack: () -> Unit,
+    onShowGuide: () -> Unit,
     onCapture: () -> Unit,
     onGallery: () -> Unit,
     pulseScale: Float
 ) {
-    // ✅ FIX: Wrap everything in a Box so we can use .align()
+    val density = LocalDensity.current
+    val navigationBarHeight = WindowInsets.navigationBars.getBottom(density) / density.density
+
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
 
@@ -294,7 +308,7 @@ fun CameraMode(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
+                .height((240 + navigationBarHeight).dp)
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
@@ -344,6 +358,7 @@ fun CameraMode(
                     )
                 }
 
+                // ✅ Only flash button at top now
                 Surface(
                     shape = CircleShape,
                     color = if (flashEnabled) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.2f)
@@ -361,69 +376,54 @@ fun CameraMode(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Scanning frame guide
+            // Simplified scanning frame guide
             Box(
                 modifier = Modifier
-                    .size(280.dp)
+                    .size(200.dp)
                     .align(Alignment.CenterHorizontally)
                     .border(
-                        width = 3.dp,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFF66BB6A),
-                                Color(0xFFFFD54F),
-                                Color(0xFF66BB6A)
-                            )
-                        ),
-                        shape = RoundedCornerShape(24.dp)
+                        width = 2.dp,
+                        color = Color.White.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(16.dp)
                     )
-                    .padding(8.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(20.dp)
                         .align(Alignment.TopStart)
-                        .background(Color(0xFF66BB6A), RoundedCornerShape(topStart = 16.dp))
+                        .background(Color(0xFF66BB6A), RoundedCornerShape(topStart = 12.dp))
                 )
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(20.dp)
                         .align(Alignment.TopEnd)
-                        .background(Color(0xFF66BB6A), RoundedCornerShape(topEnd = 16.dp))
+                        .background(Color(0xFF66BB6A), RoundedCornerShape(topEnd = 12.dp))
                 )
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(20.dp)
                         .align(Alignment.BottomStart)
-                        .background(Color(0xFF66BB6A), RoundedCornerShape(bottomStart = 16.dp))
+                        .background(Color(0xFF66BB6A), RoundedCornerShape(bottomStart = 12.dp))
                 )
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(20.dp)
                         .align(Alignment.BottomEnd)
-                        .background(Color(0xFF66BB6A), RoundedCornerShape(bottomEnd = 16.dp))
+                        .background(Color(0xFF66BB6A), RoundedCornerShape(bottomEnd = 12.dp))
                 )
-
-                Box(
-                    modifier = Modifier.align(Alignment.Center),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CenterFocusWeak,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.5f),
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Bottom controls
+            // ✅ Bottom controls with info icon next to camera
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 40.dp, start = 20.dp, end = 20.dp),
+                    .padding(
+                        bottom = (navigationBarHeight + 24).dp,
+                        start = 20.dp,
+                        end = 20.dp
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
@@ -431,6 +431,7 @@ fun CameraMode(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Gallery button
                     Surface(
                         shape = CircleShape,
                         color = Color.White.copy(alpha = 0.2f),
@@ -446,6 +447,7 @@ fun CameraMode(
                         }
                     }
 
+                    // Camera button with pulse effect
                     Box(contentAlignment = Alignment.Center) {
                         Box(
                             modifier = Modifier
@@ -476,14 +478,27 @@ fun CameraMode(
                         }
                     }
 
-                    Box(modifier = Modifier.size(56.dp))
+                    // ✅ Info button (moved from top to bottom)
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.2f),
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        IconButton(onClick = onShowGuide) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "Guide",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
                 }
             }
-
-
         }
     }
 }
+
 
 @Composable
 fun ImagePreviewMode(
@@ -492,6 +507,9 @@ fun ImagePreviewMode(
     onBack: () -> Unit,
     onAnalyze: () -> Unit
 ) {
+    val density = LocalDensity.current
+    val navigationBarHeight = WindowInsets.navigationBars.getBottom(density) / density.density
+
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             bitmap = bitmap.asImageBitmap(),
@@ -545,7 +563,7 @@ fun ImagePreviewMode(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 40.dp),
+                    .padding(bottom = (navigationBarHeight + 24).dp),
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
@@ -576,8 +594,120 @@ fun ImagePreviewMode(
                     }
                 }
             }
+        }
+    }
+}
 
+@Composable
+fun ScanGuideDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .background(Color(0xFFE8F5E9), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Camera,
+                    contentDescription = null,
+                    tint = Color(0xFF4CAF50),
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        },
+        title = {
+            Text(
+                text = "Scanning Tips",
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                GuideItem(
+                    icon = Icons.Default.WbSunny,
+                    title = "Good Lighting",
+                    description = "Take photos in bright, natural light for best results"
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                GuideItem(
+                    icon = Icons.Default.PhotoSizeSelectLarge,
+                    title = "Fill the Frame",
+                    description = "Position the leaf to fill most of the camera view"
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                GuideItem(
+                    icon = Icons.Default.CenterFocusStrong,
+                    title = "Focus on Symptoms",
+                    description = "Capture affected areas clearly and in focus"
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                GuideItem(
+                    icon = Icons.Default.Block,
+                    title = "Avoid Blur",
+                    description = "Hold steady and avoid moving while capturing"
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                GuideItem(
+                    icon = Icons.Default.Nature,
+                    title = "Clean Background",
+                    description = "Use a plain surface behind the leaf when possible"
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4CAF50)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Got it!", fontWeight = FontWeight.SemiBold)
+            }
+        },
+        shape = RoundedCornerShape(20.dp)
+    )
+}
 
+@Composable
+fun GuideItem(
+    icon: ImageVector,
+    title: String,
+    description: String
+) {
+    Row(verticalAlignment = Alignment.Top) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(Color(0xFFF1F8E9), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color(0xFF689F38),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF1B5E20)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                fontSize = 12.sp,
+                color = Color(0xFF757575),
+                lineHeight = 16.sp
+            )
         }
     }
 }
