@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 
@@ -239,38 +240,18 @@ fun ForgotPasswordScreen(
 
                         isLoading = true
 
-                        FirestoreHelper.checkUserSignInMethod(
-                            email = email,
-                            onSuccess = { isGoogleUser ->
-                                if (isGoogleUser) {
-                                    isLoading = false
-                                    errorMessage = "This account uses Google Sign-In. Please sign in with Google instead"
+                        auth.sendPasswordResetEmail(email)
+                            .addOnCompleteListener { task ->
+                                isLoading = false
+
+                                if (task.isSuccessful) {
+                                    showSuccessDialog = true
                                 } else {
-                                    auth.sendPasswordResetEmail(email)
-                                        .addOnCompleteListener { resetTask ->
-                                            isLoading = false
-                                            if (resetTask.isSuccessful) {
-                                                showSuccessDialog = true
-                                            } else {
-                                                errorMessage = when {
-                                                    resetTask.exception?.message?.contains("network") == true ->
-                                                        "Network error. Please check your connection"
-                                                    else ->
-                                                        "Failed to send reset email. Please try again"
-                                                }
-                                            }
-                                        }
+                                    errorMessage = task.exception?.localizedMessage
+                                        ?: "Failed to send reset email. Please try again"
                                 }
-                            },
-                            onNotFound = {
-                                isLoading = false
-                                errorMessage = "No account found with this email"
-                            },
-                            onFailure = { exception ->
-                                isLoading = false
-                                errorMessage = "Failed to verify email. Please try again"
                             }
-                        )
+
                     },
                     modifier = Modifier
                         .fillMaxWidth()

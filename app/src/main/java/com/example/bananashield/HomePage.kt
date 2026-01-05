@@ -48,6 +48,15 @@ fun HomePage(
     var unreadNotifCount by remember { mutableStateOf(0) }
     var showHistoryDetail by remember { mutableStateOf<ScanHistory?>(null) }
 
+    // ✅ Add state for settings screens
+    var showEditProfile by remember { mutableStateOf(false) }
+    var showChangePassword by remember { mutableStateOf(false) }
+    var showFAQ by remember { mutableStateOf(false) }
+    var showContactUs by remember { mutableStateOf(false) }
+    var showPrivacyPolicy by remember { mutableStateOf(false) }
+
+    var showProfile by remember { mutableStateOf(false) }
+
     // ✅ NEW: Handle deep link navigation
     LaunchedEffect(initialTab, deepLinkScanId) {
         if (initialTab != null) {
@@ -61,7 +70,10 @@ fun HomePage(
                     scanId = deepLinkScanId,
                     onSuccess = { scanHistory ->
                         showHistoryDetail = scanHistory
-                        android.util.Log.d("HomePage", "✅ Opened scan detail: ${scanHistory.diseaseName}")
+                        android.util.Log.d(
+                            "HomePage",
+                            "✅ Opened scan detail: ${scanHistory.diseaseName}"
+                        )
                         onDeepLinkHandled()
                     },
                     onFailure = { error ->
@@ -88,9 +100,10 @@ fun HomePage(
     DisposableEffect(currentUser?.uid) {
         var listenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
         currentUser?.uid?.let { userId ->
-            listenerRegistration = NotificationHelper.listenToNotifications(userId) { notifications ->
-                unreadNotifCount = notifications.count { !it.read }
-            }
+            listenerRegistration =
+                NotificationHelper.listenToNotifications(userId) { notifications ->
+                    unreadNotifCount = notifications.count { !it.read }
+                }
         }
 
         onDispose {
@@ -140,6 +153,52 @@ fun HomePage(
         return
     }
 
+    // ✅ Handle showing settings screens
+    when {
+        showEditProfile -> {
+            EditProfilePage(
+                onNavigateBack = { showEditProfile = false }
+            )
+            return
+        }
+
+        showChangePassword -> {
+            ChangePasswordPage(
+                onNavigateBack = { showChangePassword = false }
+            )
+            return
+        }
+
+        showFAQ -> {
+            FAQPage(
+                onNavigateBack = { showFAQ = false }
+            )
+            return
+        }
+
+        showContactUs -> {
+            ContactUsPage(
+                onNavigateBack = { showContactUs = false }
+            )
+            return
+        }
+
+        showPrivacyPolicy -> {
+            PrivacyPolicyPage(
+                onNavigateBack = { showPrivacyPolicy = false }
+            )
+            return
+        }
+
+        showProfile -> {
+            ProfilePage(
+                paddingValues = PaddingValues(0.dp),
+                onNavigateBack = { showProfile = false }
+            )
+            return
+        }
+    }
+
     Scaffold(
         bottomBar = {
             // Hide bottom navigation when on scan tab (index 2)
@@ -162,7 +221,8 @@ fun HomePage(
                 paddingValues = contentPadding,
                 onScanClick = { selectedTab = 2 },
                 onHistoryClick = { selectedTab = 3 },
-                onNotificationClick = { selectedTab = 1 }
+                onNotificationClick = { selectedTab = 1 },
+                onProfileClick = { showProfile = true } // ✅ ADD THIS LINE
             )
 
             1 -> NotificationContent(
@@ -196,7 +256,12 @@ fun HomePage(
 
             4 -> SettingsContent(
                 paddingValues = contentPadding,
-                onNavigateBack = { selectedTab = 0 }
+                onNavigateBack = { selectedTab = 0 },
+                onNavigateToEditProfile = { showEditProfile = true },
+                onNavigateToChangePassword = { showChangePassword = true },
+                onNavigateToFAQ = { showFAQ = true },
+                onNavigateToContactUs = { showContactUs = true },
+                onNavigateToPrivacyPolicy = { showPrivacyPolicy = true }
             )
         }
     }
@@ -208,7 +273,8 @@ fun HomeContent(
     paddingValues: PaddingValues,
     onScanClick: () -> Unit,
     onHistoryClick: () -> Unit,
-    onNotificationClick: () -> Unit = {}
+    onNotificationClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {} // ✅ ADD THIS PARAMETER
 ) {
     val auth = Firebase.auth
     val currentUser = auth.currentUser
@@ -304,7 +370,8 @@ fun HomeContent(
                             .size(60.dp)
                             .shadow(8.dp, CircleShape)
                             .clip(CircleShape)
-                            .background(Color.White),
+                            .background(Color.White)
+                            .clickable { onProfileClick() }, // ✅ ADD THIS LINE
                         contentAlignment = Alignment.Center
                     ) {
                         val profileImageUrl = userData?.get("profileImageUrl") as? String

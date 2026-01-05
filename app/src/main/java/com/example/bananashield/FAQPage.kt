@@ -162,7 +162,7 @@ fun FAQPage(onNavigateBack: () -> Unit) {
             ModernDiseaseCard(
                 title = "Black Sigatoka",
                 scientificName = "Mycosphaerella fijiensis",
-                accuracy = "96%",
+                accuracy = "100%",
                 description = "Dark streaks on leaves with yellow halos",
                 symptoms = listOf(
                     "Dark brown to black streaks on leaves",
@@ -183,7 +183,7 @@ fun FAQPage(onNavigateBack: () -> Unit) {
             ModernDiseaseCard(
                 title = "Banana Bunchy Top",
                 scientificName = "BBTV - Viral Disease",
-                accuracy = "93%",
+                accuracy = "100%",
                 description = "Stunted growth with bunched leaves at top",
                 symptoms = listOf(
                     "Severely stunted plant growth",
@@ -204,7 +204,7 @@ fun FAQPage(onNavigateBack: () -> Unit) {
             ModernDiseaseCard(
                 title = "Fusarium Wilt (TR4)",
                 scientificName = "Panama Disease - Tropical Race 4",
-                accuracy = "92%",
+                accuracy = "98%",
                 description = "Wilting and yellowing leads to plant death",
                 symptoms = listOf(
                     "Yellowing and wilting of older leaves",

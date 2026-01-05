@@ -135,7 +135,7 @@ fun DetectionAccuracyPage(onNavigateBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "94%",
+                    text = "99%",
                     fontSize = 56.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -169,7 +169,7 @@ fun DetectionAccuracyPage(onNavigateBack: () -> Unit) {
         ModernAccuracyCard(
             diseaseName = "Black Sigatoka",
             scientificName = "Mycosphaerella fijiensis",
-            accuracy = 96,
+            accuracy = 100,
             color = Color(0xFF4CAF50)
         )
 
@@ -178,7 +178,7 @@ fun DetectionAccuracyPage(onNavigateBack: () -> Unit) {
         ModernAccuracyCard(
             diseaseName = "Banana Bunchy Top",
             scientificName = "BBTV - Viral Disease",
-            accuracy = 93,
+            accuracy = 100,
             color = Color(0xFF66BB6A)
         )
 
@@ -187,7 +187,7 @@ fun DetectionAccuracyPage(onNavigateBack: () -> Unit) {
         ModernAccuracyCard(
             diseaseName = "Fusarium Wilt (TR4)",
             scientificName = "Panama Disease",
-            accuracy = 92,
+            accuracy = 98,
             color = Color(0xFF81C784)
         )
 

@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -155,14 +156,16 @@ fun LoginScreen(
                     Box(
                         modifier = Modifier
                             .size(120.dp)
-                            .clip(CircleShape)
-                            .background(Color.White),
+                            .clip(CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.logo),
                             contentDescription = "BananaShield Logo",
-                            modifier = Modifier.size(100.dp)
+                            modifier = Modifier
+                                .fillMaxSize()   // ✅ Fill the circle
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop   // ✅ Crop square → circle
                         )
                     }
 

@@ -323,18 +323,21 @@ fun ProfilePage(
                     ProfileInfoRow(
                         icon = Icons.Default.Phone,
                         label = "Phone Number",
-                        value = userData?.get("phone") as? String ?: "Not set"
+                        value = displayOrPlaceholder(userData?.get("phone") as? String)
                     )
 
                     ProfileInfoRow(
                         icon = Icons.Default.LocationOn,
                         label = "Location",
-                        value = userData?.get("location") as? String ?: "Not set"
+                        value = displayOrPlaceholder(userData?.get("location") as? String)
                     )
 
-                    val farmSize = userData?.get("farmSize") as? String ?: "Not set"
-                    val farmSizeDisplay =
-                        if (farmSize != "Not set") "$farmSize Hectares" else farmSize
+                    val farmSizeRaw = userData?.get("farmSize") as? String
+                    val farmSizeDisplay = if (farmSizeRaw.isNullOrBlank()) {
+                        "Not set"
+                    } else {
+                        "$farmSizeRaw Hectares"
+                    }
 
                     ProfileInfoRow(
                         icon = Icons.Default.Landscape,
@@ -413,6 +416,10 @@ fun ProfilePage(
     }
 }
 
+fun displayOrPlaceholder(value: String?, placeholder: String = "Not set"): String {
+    return if (value.isNullOrBlank()) placeholder else value
+}
+
 @Composable
 fun ProfileStatCard(
     value: String,
@@ -456,6 +463,9 @@ fun ProfileInfoRow(
     label: String,
     value: String
 ) {
+    val isPlaceholder = value == "Not set"
+    val valueColor = if (isPlaceholder) Color(0xFF9E9E9E) else Color(0xFF1B5E20)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -496,7 +506,7 @@ fun ProfileInfoRow(
                     text = value,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF1B5E20)
+                    color = valueColor   // ✅ HERE
                 )
             }
         }
