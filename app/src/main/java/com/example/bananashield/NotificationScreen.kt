@@ -38,6 +38,9 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import java.text.SimpleDateFormat
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.window.Dialog
 import java.util.*
 
 // ============================================================================
@@ -93,6 +96,7 @@ fun NotificationContent(
     var selectedFilter by remember { mutableStateOf("All") }
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
     var showClearAllDialog by remember { mutableStateOf(false) }
+    var showMessageDialog by remember { mutableStateOf<AppNotification?>(null) }
     val density = LocalDensity.current
     val statusBarHeight = WindowInsets.statusBars.getTop(density) / density.density
 
@@ -206,6 +210,13 @@ fun NotificationContent(
         )
     }
 
+    showMessageDialog?.let { notification ->
+        AdminReplyDialog(
+            notification = notification,
+            onDismiss = { showMessageDialog = null }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -305,7 +316,7 @@ fun NotificationContent(
                         contentPadding = PaddingValues(horizontal = 0.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        val filters = listOf("All", "Unread", "Scan Results", "Messages", "Tips")
+                        val filters = listOf("All", "Unread", "Scan Results", "Messages")
                         items(filters.size) { index ->
                             val filter = filters[index]
                             val count = when (filter) {
@@ -371,13 +382,18 @@ fun NotificationContent(
                         notification = notification,
                         onClick = {
                             android.util.Log.d("NotificationContent", "🔔 Clicked notification: ${notification.id}, read: ${notification.read}")
-                            if (!notification.read) {  // ✅ Changed from isRead
+                            if (!notification.read) {
                                 android.util.Log.d("NotificationContent", "✅ Marking as read: ${notification.id}")
                                 NotificationHelper.markAsRead(notification.id)
                             }
 
-                            // ✅ Navigate immediately (no delay needed - real-time listener handles UI)
-                            if (notification.relatedId != null &&
+                            // ✅ Show dialog for admin replies
+                            if (notification.type == NotificationType.ADMIN_REPLY) {
+                                android.util.Log.d("NotificationContent", "📱 Opening dialog for admin reply: ${notification.id}")
+                                showMessageDialog = notification
+                            }
+                            // Navigate for scan results
+                            else if (notification.relatedId != null &&
                                 (notification.type == NotificationType.SCAN_COMPLETE ||
                                         notification.type == NotificationType.DISEASE_DETECTED ||
                                         notification.type == NotificationType.LOW_CONFIDENCE_WARNING)) {
@@ -857,6 +873,90 @@ object NotificationHelper {
         }, 10000) // 10 seconds cleanup timeout
     }
 
+// Add this to your NotificationHelper object in NotificationContent.kt
+
+// ============================================================================
+// REAL-TIME LISTENER FOR CONTACT MESSAGE REPLIES
+// ============================================================================
+
+    /**
+     * Listen for admin replies to user's contact messages
+     * This will automatically create notifications when admin replies
+     */
+    fun listenForAdminReplies(userId: String): com.google.firebase.firestore.ListenerRegistration {
+        val db = Firebase.firestore
+
+        return db.collection("contact_messages")
+            .whereEqualTo("userId", userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("NotificationHelper", "Listen for replies failed", error)
+                    return@addSnapshotListener
+                }
+
+                snapshot?.documentChanges?.forEach { change ->
+                    if (change.type == com.google.firebase.firestore.DocumentChange.Type.MODIFIED) {
+                        val doc = change.document
+                        val adminReply = doc.getString("admin_reply")
+                        val messageId = doc.id
+
+                        // Check if admin_reply was just added (not empty)
+                        if (!adminReply.isNullOrBlank()) {
+                            android.util.Log.d("NotificationHelper", "📩 Admin reply detected for message: $messageId")
+
+                            // Check if notification already exists for this reply
+                            checkAndCreateReplyNotification(
+                                userId = userId,
+                                messageId = messageId,
+                                adminReply = adminReply,
+                                subject = doc.getString("subject") ?: "Your Inquiry"
+                            )
+                        }
+                    }
+                }
+            }
+    }
+
+    /**
+     * Check if notification exists before creating one
+     * Prevents duplicate notifications for the same reply
+     */
+    private fun checkAndCreateReplyNotification(
+        userId: String,
+        messageId: String,
+        adminReply: String,
+        subject: String
+    ) {
+        val db = Firebase.firestore
+
+        db.collection(COLLECTION)
+            .whereEqualTo("userId", userId)
+            .whereEqualTo("relatedId", messageId)
+            .whereEqualTo("type", NotificationType.ADMIN_REPLY.name)
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.isEmpty) {
+                    android.util.Log.d("NotificationHelper", "✅ Creating new admin reply notification")
+
+                    createNotification(
+                        userId = userId,
+                        type = NotificationType.ADMIN_REPLY,
+                        title = "Admin Reply: $subject",
+                        message = adminReply,  // ✅ Full reply message shown in notification
+                        relatedId = messageId,
+                        actionUrl = null,  // ✅ No navigation needed
+                        priority = NotificationPriority.HIGH
+                    )
+                } else {
+                    android.util.Log.d("NotificationHelper", "ℹ️ Notification already exists for this reply")
+                }
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("NotificationHelper", "❌ Failed to check existing notifications", e)
+            }
+    }
+
     fun notifyAdminReply(
         userId: String,
         inquiryId: String,
@@ -904,6 +1004,210 @@ object NotificationHelper {
         val third: C,
         val fourth: D
     )
+}
+
+@Composable
+fun AdminReplyDialog(
+    notification: AppNotification,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.75f),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Header
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF2196F3),
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AdminPanelSettings,
+                                contentDescription = null,
+                                tint = Color(0xFF2196F3),
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Admin Reply",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "BananaShield Support",
+                                fontSize = 13.sp,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Content - Scrollable
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp)
+                ) {
+                    // Subject
+                    Text(
+                        text = "Subject",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF757575)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = notification.title.removePrefix("Admin Reply: "),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1B5E20)
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Divider
+                    Divider(
+                        color = Color(0xFFE0E0E0),
+                        thickness = 1.dp
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Message Label
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Message,
+                            contentDescription = null,
+                            tint = Color(0xFF2196F3),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Message",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF424242)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Full Message
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFF5F5F5)
+                        )
+                    ) {
+                        Text(
+                            text = notification.message,
+                            fontSize = 15.sp,
+                            color = Color(0xFF212121),
+                            lineHeight = 22.sp,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Timestamp
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
+                                .format(Date(notification.timestamp)),
+                            fontSize = 12.sp,
+                            color = Color(0xFF9E9E9E)
+                        )
+                    }
+                }
+
+                // Footer with action button
+                Divider(
+                    color = Color(0xFFE0E0E0),
+                    thickness = 1.dp
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2196F3)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(48.dp)
+                    ) {
+                        Text(
+                            text = "Got it",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun formatTimeAgo(timestamp: Long): String {

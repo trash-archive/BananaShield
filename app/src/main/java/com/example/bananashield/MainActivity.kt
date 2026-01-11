@@ -24,11 +24,13 @@ import com.example.bananashield.ui.theme.BananaShieldTheme
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 
 class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
+    private var adminReplyListener: ListenerRegistration? = null
 
     // ✅ Notification permission launcher (Android 13+)
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -58,6 +60,12 @@ class MainActivity : ComponentActivity() {
 
         // Initialize Firebase Auth
         auth = Firebase.auth
+
+        // ✅ Start listening for admin replies
+        val currentUser = auth.currentUser
+        if (currentUser != null) {
+            adminReplyListener = NotificationHelper.listenForAdminReplies(currentUser.uid)
+        }
 
         // ✅ ONE-TIME MIGRATION: Uncomment this line, run app once, then comment again
         // migrateNotifications()
@@ -231,5 +239,11 @@ class MainActivity : ComponentActivity() {
             .addOnFailureListener { e ->
                 android.util.Log.e("Migration", "❌ Failed to fetch notifications for migration: ${e.message}", e)
             }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // ✅ Clean up listener
+        adminReplyListener?.remove()
     }
 }
