@@ -43,7 +43,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
+
+// Validation state
+enum class ValidationState {
+    DETECTING,      // Currently analyzing
+    BANANA_DETECTED, // Banana leaf found
+    NO_BANANA       // No banana leaf detected
+}
 
 @Composable
 fun ScanContent(
@@ -99,11 +107,18 @@ fun ModernCameraScreen(
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
 
+    // ✅ Live validation states
+    var validationState by remember { mutableStateOf(ValidationState.DETECTING) }
+    var confidence by remember { mutableStateOf(0f) }
+    var detectionCount by remember { mutableStateOf(0) }  // Frame stability counter
+    var lastAnalyzedTime by remember { mutableStateOf(0L) }  // ✅ Throttle analyzer
+
     val classifier = remember { BananaClassifier(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val previewView = remember { PreviewView(context) }
 
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var imageAnalysis by remember { mutableStateOf<ImageAnalysis?>(null) }
 
     // Gallery picker
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -176,6 +191,60 @@ fun ModernCameraScreen(
 
                 imageCapture = newImageCapture
 
+                // ✅ Add image analysis for live validation
+                val newImageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .also { analysis ->
+                        analysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                            try {
+                                val bitmap = imageProxy.toBitmap()
+                                val rotatedBitmap = rotateBitmap(
+                                    bitmap,
+                                    imageProxy.imageInfo.rotationDegrees.toFloat()
+                                )
+
+                                // Analyze frame for banana leaf
+                                val result = classifier.classify(rotatedBitmap)
+
+                                // ✅ PROPER VALIDATION LOGIC (CORRECTED)
+                                if (result != null) {
+                                    // ✅ FIX #1: Use NEGATIVE CHECK (simpler & more reliable)
+                                    val isBananaPrediction =
+                                        result.label != "Not Banana Leaf" &&
+                                                result.confidence > 0.85f  // High confidence threshold
+
+                                    // ✅ Frame stability - require 5 consecutive detections
+                                    if (isBananaPrediction) {
+                                        detectionCount++
+                                    } else {
+                                        detectionCount = 0
+                                    }
+
+                                    // ✅ FIX #2: Proper state progression (use DETECTING state)
+                                    validationState = when {
+                                        detectionCount >= 5 -> ValidationState.BANANA_DETECTED
+                                        detectionCount > 0  -> ValidationState.DETECTING
+                                        else                -> ValidationState.NO_BANANA
+                                    }
+
+                                    confidence = result.confidence
+                                } else {
+                                    detectionCount = 0
+                                    validationState = ValidationState.NO_BANANA
+                                    confidence = 0f
+                                }
+
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            } finally {
+                                imageProxy.close()
+                            }
+                        }
+                    }
+
+                imageAnalysis = newImageAnalysis
+
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                 provider.unbindAll()
@@ -183,7 +252,8 @@ fun ModernCameraScreen(
                     lifecycleOwner,
                     cameraSelector,
                     preview,
-                    newImageCapture
+                    newImageCapture,
+                    newImageAnalysis  // ✅ Bind image analysis
                 )
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -231,29 +301,34 @@ fun ModernCameraScreen(
                 CameraMode(
                     previewView = previewView,
                     flashEnabled = flashEnabled,
+                    validationState = validationState,  // ✅ Pass validation state
+                    confidence = confidence,
                     onFlashToggle = { flashEnabled = !flashEnabled },
                     onBack = onNavigateBack,
                     onShowGuide = { showGuide = true },
                     onCapture = {
-                        imageCapture?.let { capture ->
-                            capture.takePicture(
-                                cameraExecutor,
-                                object : ImageCapture.OnImageCapturedCallback() {
-                                    override fun onCaptureSuccess(imageProxy: ImageProxy) {
-                                        val bitmap = imageProxy.toBitmap()
-                                        val rotatedBitmap = rotateBitmap(
-                                            bitmap,
-                                            imageProxy.imageInfo.rotationDegrees.toFloat()
-                                        )
-                                        previewBitmap = rotatedBitmap
-                                        imageProxy.close()
-                                    }
+                        // ✅ Only capture if banana is detected
+                        if (validationState == ValidationState.BANANA_DETECTED) {
+                            imageCapture?.let { capture ->
+                                capture.takePicture(
+                                    cameraExecutor,
+                                    object : ImageCapture.OnImageCapturedCallback() {
+                                        override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                                            val bitmap = imageProxy.toBitmap()
+                                            val rotatedBitmap = rotateBitmap(
+                                                bitmap,
+                                                imageProxy.imageInfo.rotationDegrees.toFloat()
+                                            )
+                                            previewBitmap = rotatedBitmap
+                                            imageProxy.close()
+                                        }
 
-                                    override fun onError(exception: ImageCaptureException) {
-                                        exception.printStackTrace()
+                                        override fun onError(exception: ImageCaptureException) {
+                                            exception.printStackTrace()
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     },
                     onGallery = {
@@ -275,6 +350,8 @@ fun ModernCameraScreen(
 fun CameraMode(
     previewView: PreviewView,
     flashEnabled: Boolean,
+    validationState: ValidationState,  // ✅ New parameter
+    confidence: Float,                  // ✅ New parameter
     onFlashToggle: () -> Unit,
     onBack: () -> Unit,
     onShowGuide: () -> Unit,
@@ -351,14 +428,14 @@ fun CameraMode(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = "Position leaf in center",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 13.sp
+
+                    // ✅ Live validation indicator
+                    LiveValidationIndicator(
+                        validationState = validationState,
+                        confidence = confidence
                     )
                 }
 
-                // ✅ Only flash button at top now
                 Surface(
                     shape = CircleShape,
                     color = if (flashEnabled) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.2f)
@@ -376,14 +453,20 @@ fun CameraMode(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Simplified scanning frame guide
+            // ✅ Dynamic scanning frame based on validation
+            val frameColor = when (validationState) {
+                ValidationState.BANANA_DETECTED -> Color(0xFF66BB6A)
+                ValidationState.NO_BANANA -> Color(0xFFEF5350)
+                ValidationState.DETECTING -> Color.White.copy(alpha = 0.6f)
+            }
+
             Box(
                 modifier = Modifier
                     .size(200.dp)
                     .align(Alignment.CenterHorizontally)
                     .border(
                         width = 2.dp,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = frameColor,
                         shape = RoundedCornerShape(16.dp)
                     )
             ) {
@@ -391,31 +474,30 @@ fun CameraMode(
                     modifier = Modifier
                         .size(20.dp)
                         .align(Alignment.TopStart)
-                        .background(Color(0xFF66BB6A), RoundedCornerShape(topStart = 12.dp))
+                        .background(frameColor, RoundedCornerShape(topStart = 12.dp))
                 )
                 Box(
                     modifier = Modifier
                         .size(20.dp)
                         .align(Alignment.TopEnd)
-                        .background(Color(0xFF66BB6A), RoundedCornerShape(topEnd = 12.dp))
+                        .background(frameColor, RoundedCornerShape(topEnd = 12.dp))
                 )
                 Box(
                     modifier = Modifier
                         .size(20.dp)
                         .align(Alignment.BottomStart)
-                        .background(Color(0xFF66BB6A), RoundedCornerShape(bottomStart = 12.dp))
+                        .background(frameColor, RoundedCornerShape(bottomStart = 12.dp))
                 )
                 Box(
                     modifier = Modifier
                         .size(20.dp)
                         .align(Alignment.BottomEnd)
-                        .background(Color(0xFF66BB6A), RoundedCornerShape(bottomEnd = 12.dp))
+                        .background(frameColor, RoundedCornerShape(bottomEnd = 12.dp))
                 )
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // ✅ Bottom controls with info icon next to camera
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -431,7 +513,6 @@ fun CameraMode(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Gallery button
                     Surface(
                         shape = CircleShape,
                         color = Color.White.copy(alpha = 0.2f),
@@ -447,38 +528,44 @@ fun CameraMode(
                         }
                     }
 
-                    // Camera button with pulse effect
+                    // ✅ Camera button - only enabled when banana detected
                     Box(contentAlignment = Alignment.Center) {
-                        Box(
-                            modifier = Modifier
-                                .size(100.dp * pulseScale)
-                                .background(
-                                    Color(0xFFFFD54F).copy(alpha = 0.3f),
-                                    CircleShape
-                                )
-                        )
+                        if (validationState == ValidationState.BANANA_DETECTED) {
+                            Box(
+                                modifier = Modifier
+                                    .size(100.dp * pulseScale)
+                                    .background(
+                                        Color(0xFFFFD54F).copy(alpha = 0.3f),
+                                        CircleShape
+                                    )
+                            )
+                        }
 
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFFFFD54F),
-                            shadowElevation = 8.dp,
+                            color = when (validationState) {
+                                ValidationState.BANANA_DETECTED -> Color(0xFFFFD54F)
+                                else -> Color.Gray.copy(alpha = 0.5f)
+                            },
+                            shadowElevation = if (validationState == ValidationState.BANANA_DETECTED) 8.dp else 0.dp,
                             modifier = Modifier.size(80.dp)
                         ) {
                             IconButton(
                                 onClick = onCapture,
+                                enabled = validationState == ValidationState.BANANA_DETECTED,
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Camera,
                                     contentDescription = "Capture",
-                                    tint = Color(0xFF1B5E20),
+                                    tint = if (validationState == ValidationState.BANANA_DETECTED)
+                                        Color(0xFF1B5E20) else Color.White.copy(alpha = 0.5f),
                                     modifier = Modifier.size(40.dp)
                                 )
                             }
                         }
                     }
 
-                    // ✅ Info button (moved from top to bottom)
                     Surface(
                         shape = CircleShape,
                         color = Color.White.copy(alpha = 0.2f),
@@ -499,6 +586,64 @@ fun CameraMode(
     }
 }
 
+// ✅ New component for live validation indicator
+@Composable
+fun LiveValidationIndicator(
+    validationState: ValidationState,
+    confidence: Float
+) {
+    val text = when (validationState) {
+        ValidationState.DETECTING -> "Hold steady..."
+        ValidationState.BANANA_DETECTED -> "Banana leaf detected"
+        ValidationState.NO_BANANA -> "No banana leaf found"
+    }
+
+    val color = when (validationState) {
+        ValidationState.DETECTING -> Color.White.copy(alpha = 0.8f)
+        ValidationState.BANANA_DETECTED -> Color(0xFF66BB6A)
+        ValidationState.NO_BANANA -> Color(0xFFEF5350)
+    }
+
+    val icon = when (validationState) {
+        ValidationState.DETECTING -> Icons.Default.Search
+        ValidationState.BANANA_DETECTED -> Icons.Default.CheckCircle
+        ValidationState.NO_BANANA -> Icons.Default.Warning
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .background(
+                color = Color.Black.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = text,
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+
+        if (validationState == ValidationState.BANANA_DETECTED && confidence > 0f) {
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "${(confidence * 100).toInt()}%",
+                color = color,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
 
 @Composable
 fun ImagePreviewMode(
@@ -837,11 +982,35 @@ fun ModernPermissionDeniedScreen(
     }
 }
 
+// ✅ FIXED: Proper YUV to Bitmap conversion for CameraX
 fun ImageProxy.toBitmap(): Bitmap {
-    val buffer = planes[0].buffer
-    val bytes = ByteArray(buffer.remaining())
-    buffer.get(bytes)
-    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    val yBuffer = planes[0].buffer
+    val uBuffer = planes[1].buffer
+    val vBuffer = planes[2].buffer
+
+    val ySize = yBuffer.remaining()
+    val uSize = uBuffer.remaining()
+    val vSize = vBuffer.remaining()
+
+    val nv21 = ByteArray(ySize + uSize + vSize)
+
+    yBuffer.get(nv21, 0, ySize)
+    vBuffer.get(nv21, ySize, vSize)
+    uBuffer.get(nv21, ySize + vSize, uSize)
+
+    val yuvImage = android.graphics.YuvImage(
+        nv21,
+        android.graphics.ImageFormat.NV21,
+        width,
+        height,
+        null
+    )
+
+    val out = java.io.ByteArrayOutputStream()
+    yuvImage.compressToJpeg(android.graphics.Rect(0, 0, width, height), 100, out)
+    val imageBytes = out.toByteArray()
+
+    return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
 }
 
 fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
