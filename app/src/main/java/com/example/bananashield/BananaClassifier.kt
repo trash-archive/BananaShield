@@ -10,6 +10,7 @@ import java.nio.ByteOrder
 data class Classification(
     val label: String,
     val confidence: Float,
+    val allConfidences: Map<String, Float> = emptyMap(),
     val diseaseInfo: DiseaseInfo
 )
 
@@ -64,26 +65,22 @@ class BananaClassifier(private val context: Context) {
         val outputFeature = outputs?.outputFeature0AsTensorBuffer
 
         val confidences = outputFeature?.floatArray ?: floatArrayOf()
-        
-        // Apply softmax for better probability distribution
-        val softmaxConfidences = softmax(confidences)
-        
-        val maxIndex = softmaxConfidences.indices.maxByOrNull { softmaxConfidences[it] } ?: 0
+
+        val maxIndex = confidences.indices.maxByOrNull { confidences[it] } ?: 0
         val label = labels.getOrNull(maxIndex) ?: "Unknown"
-        val confidence = softmaxConfidences.getOrNull(maxIndex) ?: 0f
+        val confidence = confidences.getOrNull(maxIndex) ?: 0f
+
+        val allConfidences = labels.mapIndexed { i, lbl -> lbl to (confidences.getOrNull(i) ?: 0f) }.toMap()
+        val diseaseInfo = getDiseaseInfo(label, confidence)
+        // Fix confidenceLevel to reflect the actual post-softmax confidence
+        val correctedDiseaseInfo = diseaseInfo.copy(confidenceLevel = "${(confidence * 100).toInt()}%")
 
         return Classification(
             label = label,
             confidence = confidence,
-            diseaseInfo = getDiseaseInfo(label, confidence)
+            allConfidences = allConfidences,
+            diseaseInfo = correctedDiseaseInfo
         )
-    }
-
-    private fun softmax(values: FloatArray): FloatArray {
-        val maxVal = values.maxOrNull() ?: 0f
-        val exps = values.map { kotlin.math.exp((it - maxVal).toDouble()).toFloat() }
-        val sumExps = exps.sum()
-        return exps.map { it / sumExps }.toFloatArray()
     }
 
     private fun centerCropBitmap(bitmap: Bitmap, targetSize: Int = 224): Bitmap {
@@ -101,21 +98,13 @@ class BananaClassifier(private val context: Context) {
         val intValues = IntArray(224 * 224)
         bitmap.getPixels(intValues, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
 
-        // ImageNet normalization (standard for most models)
-        val mean = floatArrayOf(0.485f, 0.456f, 0.406f)
-        val std = floatArrayOf(0.229f, 0.224f, 0.225f)
-
         var pixel = 0
         for (i in 0 until 224) {
             for (j in 0 until 224) {
                 val value = intValues[pixel++]
-                val r = ((value shr 16 and 0xFF) / 255.0f - mean[0]) / std[0]
-                val g = ((value shr 8 and 0xFF) / 255.0f - mean[1]) / std[1]
-                val b = ((value and 0xFF) / 255.0f - mean[2]) / std[2]
-                
-                byteBuffer.putFloat(r)
-                byteBuffer.putFloat(g)
-                byteBuffer.putFloat(b)
+                byteBuffer.putFloat((value shr 16 and 0xFF) / 255.0f)
+                byteBuffer.putFloat((value shr 8 and 0xFF) / 255.0f)
+                byteBuffer.putFloat((value and 0xFF) / 255.0f)
             }
         }
         return byteBuffer

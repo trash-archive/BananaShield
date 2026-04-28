@@ -23,6 +23,7 @@ data class ScanHistory(
     val diseaseType: String = "",
     val confidence: Float = 0f,
     val confidenceLevel: String = "",
+    val allConfidences: Map<String, Float> = emptyMap(),
     val severity: String = "",
 
     // Symptoms & Causes
@@ -133,6 +134,7 @@ object ScanHistoryHelper {
                         "diseaseType" to classification.diseaseInfo.diseaseType,
                         "confidence" to classification.confidence,
                         "confidenceLevel" to classification.diseaseInfo.confidenceLevel,
+                        "allConfidences" to classification.allConfidences,
                         "severity" to classification.diseaseInfo.severity,
 
                         // Symptoms & Causes
@@ -231,6 +233,7 @@ object ScanHistoryHelper {
                             diseaseType = doc.getString("diseaseType") ?: "",
                             confidence = doc.getDouble("confidence")?.toFloat() ?: 0f,
                             confidenceLevel = doc.getString("confidenceLevel") ?: "",
+                            allConfidences = (doc.get("allConfidences") as? Map<String, Double>)?.mapValues { it.value.toFloat() } ?: emptyMap(),
                             severity = doc.getString("severity") ?: "",
                             symptoms = doc.get("symptoms") as? List<String> ?: emptyList(),
                             causes = doc.get("causes") as? List<String> ?: emptyList(),
@@ -279,6 +282,7 @@ object ScanHistoryHelper {
                             diseaseType = document.getString("diseaseType") ?: "",
                             confidence = document.getDouble("confidence")?.toFloat() ?: 0f,
                             confidenceLevel = document.getString("confidenceLevel") ?: "",
+                            allConfidences = (document.get("allConfidences") as? Map<String, Double>)?.mapValues { it.value.toFloat() } ?: emptyMap(),
                             severity = document.getString("severity") ?: "",
                             symptoms = document.get("symptoms") as? List<String> ?: emptyList(),
                             causes = document.get("causes") as? List<String> ?: emptyList(),
