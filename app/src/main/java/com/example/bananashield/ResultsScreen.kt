@@ -59,7 +59,6 @@ fun ResultsScreen(
 
     var showTreatmentDetails by remember { mutableStateOf(false) }
     var showPreventionDetails by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) }
     var showSaveSuccess by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
     var hasSaved by remember { mutableStateOf(false) }
@@ -78,7 +77,6 @@ fun ResultsScreen(
         scanTimestamp = System.currentTimeMillis()
 
         if (bitmap != null && classification != null && !hasSaved) {
-            isSaving = true
             ScanHistoryHelper.saveScanResult(
                 bitmap = bitmap,
                 classification = classification,
@@ -87,7 +85,6 @@ fun ResultsScreen(
                     "Low confidence scan - may require verification" else "",
                 onSuccess = { documentId ->
                     showSaveSuccess = true
-                    isSaving = false
                     hasSaved = true
 
                     SystemNotificationHelper.showScanCompletedNotification(
@@ -108,14 +105,9 @@ fun ResultsScreen(
                 },
                 onFailure = { exception ->
                     saveError = exception.message
-                    isSaving = false
                 }
             )
         }
-    }
-
-    if (isSaving) {
-        SubtleLoadingDialog()
     }
 
     if (showImageViewer && bitmap != null) {
@@ -466,7 +458,7 @@ fun SubtleImagePreview(
                     bitmap = it.asImageBitmap(),
                     contentDescription = "Scanned Leaf",
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Fit
                 )
             }
 

@@ -55,7 +55,7 @@ class BananaClassifier(private val context: Context) {
     }
 
     fun classify(bitmap: Bitmap): Classification {
-        val resizedBitmap = Bitmap.createScaledBitmap(bitmap, 224, 224, true)
+        val resizedBitmap = centerCropBitmap(bitmap)
         val byteBuffer = convertBitmapToByteBuffer(resizedBitmap)
         val inputFeature = TensorBuffer.createFixedSize(intArrayOf(1, 224, 224, 3), org.tensorflow.lite.DataType.FLOAT32)
         inputFeature.loadBuffer(byteBuffer)
@@ -64,15 +64,34 @@ class BananaClassifier(private val context: Context) {
         val outputFeature = outputs?.outputFeature0AsTensorBuffer
 
         val confidences = outputFeature?.floatArray ?: floatArrayOf()
-        val maxIndex = confidences.indices.maxByOrNull { confidences[it] } ?: 0
+        
+        // Apply softmax for better probability distribution
+        val softmaxConfidences = softmax(confidences)
+        
+        val maxIndex = softmaxConfidences.indices.maxByOrNull { softmaxConfidences[it] } ?: 0
         val label = labels.getOrNull(maxIndex) ?: "Unknown"
-        val confidence = confidences.getOrNull(maxIndex) ?: 0f
+        val confidence = softmaxConfidences.getOrNull(maxIndex) ?: 0f
 
         return Classification(
             label = label,
             confidence = confidence,
             diseaseInfo = getDiseaseInfo(label, confidence)
         )
+    }
+
+    private fun softmax(values: FloatArray): FloatArray {
+        val maxVal = values.maxOrNull() ?: 0f
+        val exps = values.map { kotlin.math.exp((it - maxVal).toDouble()).toFloat() }
+        val sumExps = exps.sum()
+        return exps.map { it / sumExps }.toFloatArray()
+    }
+
+    private fun centerCropBitmap(bitmap: Bitmap, targetSize: Int = 224): Bitmap {
+        val size = minOf(bitmap.width, bitmap.height)
+        val x = (bitmap.width - size) / 2
+        val y = (bitmap.height - size) / 2
+        val cropped = Bitmap.createBitmap(bitmap, x, y, size, size)
+        return Bitmap.createScaledBitmap(cropped, targetSize, targetSize, true)
     }
 
     private fun convertBitmapToByteBuffer(bitmap: Bitmap): ByteBuffer {
@@ -82,13 +101,21 @@ class BananaClassifier(private val context: Context) {
         val intValues = IntArray(224 * 224)
         bitmap.getPixels(intValues, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
 
+        // ImageNet normalization (standard for most models)
+        val mean = floatArrayOf(0.485f, 0.456f, 0.406f)
+        val std = floatArrayOf(0.229f, 0.224f, 0.225f)
+
         var pixel = 0
         for (i in 0 until 224) {
             for (j in 0 until 224) {
                 val value = intValues[pixel++]
-                byteBuffer.putFloat(((value shr 16 and 0xFF) / 255.0f))
-                byteBuffer.putFloat(((value shr 8 and 0xFF) / 255.0f))
-                byteBuffer.putFloat(((value and 0xFF) / 255.0f))
+                val r = ((value shr 16 and 0xFF) / 255.0f - mean[0]) / std[0]
+                val g = ((value shr 8 and 0xFF) / 255.0f - mean[1]) / std[1]
+                val b = ((value and 0xFF) / 255.0f - mean[2]) / std[2]
+                
+                byteBuffer.putFloat(r)
+                byteBuffer.putFloat(g)
+                byteBuffer.putFloat(b)
             }
         }
         return byteBuffer
