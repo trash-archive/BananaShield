@@ -86,7 +86,11 @@ fun ResultsScreen(
                 bbtvResult = result
                 finalClassification = classification?.copy(
                     bbtvVerdict = result.verdict,
-                    bbtvScore = result.score
+                    bbtvScore = result.score,
+                    bbtvStreakAnswer = result.streakAnswer,
+                    bbtvTimelineAnswer = result.timelineAnswer,
+                    bbtvSpreadAnswer = result.spreadAnswer,
+                    bbtvAphidAnswer = result.aphidAnswer
                 )
                 showBBTVQuestionnaire = false
             },

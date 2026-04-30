@@ -45,7 +45,11 @@ data class ScanHistory(
 
     // BBTV Questionnaire
     val bbtvVerdict: String = "",
-    val bbtvScore: Int = -1
+    val bbtvScore: Int = -1,
+    val bbtvStreakAnswer: String = "",
+    val bbtvTimelineAnswer: String = "",
+    val bbtvSpreadAnswer: String = "",
+    val bbtvAphidAnswer: String = ""
 )
 
 object ScanHistoryHelper {
@@ -160,7 +164,11 @@ object ScanHistoryHelper {
 
                         // BBTV Questionnaire
                         "bbtvVerdict" to (classification.bbtvVerdict?.name ?: ""),
-                        "bbtvScore" to classification.bbtvScore,
+                        "bbtvScore" to classification.bbtvScore.toLong(),
+                        "bbtvStreakAnswer" to classification.bbtvStreakAnswer,
+                        "bbtvTimelineAnswer" to classification.bbtvTimelineAnswer,
+                        "bbtvSpreadAnswer" to classification.bbtvSpreadAnswer,
+                        "bbtvAphidAnswer" to classification.bbtvAphidAnswer,
 
                         // Additional metadata for admin dashboard
                         "createdAt" to com.google.firebase.Timestamp.now(),
@@ -253,7 +261,11 @@ object ScanHistoryHelper {
                             location = doc.getString("location") ?: "",
                             notes = doc.getString("notes") ?: "",
                             bbtvVerdict = doc.getString("bbtvVerdict") ?: "",
-                            bbtvScore = doc.getLong("bbtvScore")?.toInt() ?: -1
+                            bbtvScore = doc.getLong("bbtvScore")?.toInt() ?: -1,
+                            bbtvStreakAnswer = doc.getString("bbtvStreakAnswer") ?: "",
+                            bbtvTimelineAnswer = doc.getString("bbtvTimelineAnswer") ?: "",
+                            bbtvSpreadAnswer = doc.getString("bbtvSpreadAnswer") ?: "",
+                            bbtvAphidAnswer = doc.getString("bbtvAphidAnswer") ?: ""
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "❌ Error parsing document: ${e.message}")
@@ -304,7 +316,11 @@ object ScanHistoryHelper {
                             location = document.getString("location") ?: "",
                             notes = document.getString("notes") ?: "",
                             bbtvVerdict = document.getString("bbtvVerdict") ?: "",
-                            bbtvScore = document.getLong("bbtvScore")?.toInt() ?: -1
+                            bbtvScore = document.getLong("bbtvScore")?.toInt() ?: -1,
+                            bbtvStreakAnswer = document.getString("bbtvStreakAnswer") ?: "",
+                            bbtvTimelineAnswer = document.getString("bbtvTimelineAnswer") ?: "",
+                            bbtvSpreadAnswer = document.getString("bbtvSpreadAnswer") ?: "",
+                            bbtvAphidAnswer = document.getString("bbtvAphidAnswer") ?: ""
                         )
 
                         Log.d(TAG, "✅ Successfully fetched scan: ${scanHistory.diseaseName}")

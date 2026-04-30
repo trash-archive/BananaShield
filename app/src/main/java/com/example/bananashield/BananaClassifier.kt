@@ -13,7 +13,11 @@ data class Classification(
     val allConfidences: Map<String, Float> = emptyMap(),
     val diseaseInfo: DiseaseInfo,
     val bbtvVerdict: BBTVVerdict? = null,
-    val bbtvScore: Int = -1
+    val bbtvScore: Int = -1,
+    val bbtvStreakAnswer: String = "",
+    val bbtvTimelineAnswer: String = "",
+    val bbtvSpreadAnswer: String = "",
+    val bbtvAphidAnswer: String = ""
 )
 
 data class DiseaseInfo(

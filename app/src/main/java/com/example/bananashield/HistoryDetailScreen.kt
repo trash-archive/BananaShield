@@ -1,4 +1,4 @@
-package com.example.bananashield
+﻿package com.example.bananashield
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -221,7 +221,11 @@ fun HistoryDetailScreen(
                     if (scanHistory.diseaseName.contains("Bunchy Top", ignoreCase = true) && scanHistory.bbtvVerdict.isNotEmpty()) {
                         HistoryBBTVVerdictBanner(
                             verdictString = scanHistory.bbtvVerdict,
-                            score = scanHistory.bbtvScore
+                            score = scanHistory.bbtvScore,
+                            streakAnswer = scanHistory.bbtvStreakAnswer,
+                            timelineAnswer = scanHistory.bbtvTimelineAnswer,
+                            spreadAnswer = scanHistory.bbtvSpreadAnswer,
+                            aphidAnswer = scanHistory.bbtvAphidAnswer
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                     }
@@ -750,38 +754,64 @@ fun HistoryClassBreakdownCard(allConfidences: Map<String, Float>) {
 @Composable
 fun HistoryBBTVVerdictBanner(
     verdictString: String,
-    score: Int
+    score: Int,
+    streakAnswer: String = "",
+    timelineAnswer: String = "",
+    spreadAnswer: String = "",
+    aphidAnswer: String = ""
 ) {
     val verdict = runCatching { BBTVVerdict.valueOf(verdictString) }.getOrNull() ?: return
 
     val (backgroundColor, borderColor, icon, title, message) = when (verdict) {
         BBTVVerdict.HIGH -> Tuple5(
-            Color(0xFFFFEBEE),
-            Color(0xFFEF5350),
-            Icons.Default.Warning,
+            Color(0xFFFFEBEE), Color(0xFFEF5350), Icons.Default.Warning,
             "High BBTV Likelihood",
             "Multiple key indicators were present at the time of scan. Isolate this plant, control aphids in the surrounding area, and contact your local agricultural officer before uprooting."
         )
         BBTVVerdict.MODERATE -> Tuple5(
-            Color(0xFFFFF3E0),
-            Color(0xFFFF9800),
-            Icons.Default.Info,
-            "Possible BBTV — Monitor Closely",
+            Color(0xFFFFF3E0), Color(0xFFFF9800), Icons.Default.Info,
+            "Possible BBTV - Monitor Closely",
             "Some indicators were present but not conclusive at the time of scan. Continue monitoring this plant and rescan if symptoms worsen or spread to nearby plants."
         )
         BBTVVerdict.LOW -> Tuple5(
-            Color(0xFFE8F5E9),
-            Color(0xFF4CAF50),
-            Icons.Default.CheckCircle,
+            Color(0xFFE8F5E9), Color(0xFF4CAF50), Icons.Default.CheckCircle,
             "Low BBTV Likelihood",
             "Symptoms were more consistent with nutrient deficiency, water stress, or normal slow growth at the time of scan. Check soil conditions and fertilization."
         )
     }
 
+    val answers = listOfNotNull(
+        when (streakAnswer) {
+            "yes" -> "Streaks on midrib: Yes, visible"
+            "no" -> "Streaks on midrib: Not seen"
+            "unsure" -> "Streaks on midrib: Not sure"
+            else -> null
+        },
+        when (timelineAnswer) {
+            "new_stable" -> "Timeline: Less than 1 week"
+            "weeks_stable" -> "Timeline: 1-2 weeks, stable"
+            "weeks_worse" -> "Timeline: 2-4 weeks, worsening"
+            "month_worse" -> "Timeline: 1+ month, worsening"
+            else -> null
+        },
+        when (spreadAnswer) {
+            "multiple" -> "Spread: Several nearby plants"
+            "one_or_two" -> "Spread: 1-2 nearby plants"
+            "only_this" -> "Spread: Only this plant"
+            "unsure" -> "Spread: Not checked"
+            else -> null
+        },
+        when (aphidAnswer) {
+            "yes_insects" -> "Aphids/insects: Dark insects seen"
+            "ants_only" -> "Aphids/insects: Ants only"
+            "no_insects" -> "Aphids/insects: None visible"
+            "not_checked" -> "Aphids/insects: Not checked"
+            else -> null
+        }
+    )
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
         shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor.copy(alpha = 0.5f)),
@@ -789,34 +819,25 @@ fun HistoryBBTVVerdictBanner(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = borderColor,
-                    modifier = Modifier.size(22.dp)
-                )
+                Icon(imageVector = icon, contentDescription = null, tint = borderColor, modifier = Modifier.size(22.dp))
                 Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = borderColor
-                )
+                Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = borderColor)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = message,
-                fontSize = 13.sp,
-                color = Color(0xFF424242),
-                lineHeight = 19.sp
-            )
+            Text(text = message, fontSize = 13.sp, color = Color(0xFF424242), lineHeight = 19.sp)
+            if (answers.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Divider(color = borderColor.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(text = "Farmer's answers", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF757575))
+                Spacer(modifier = Modifier.height(6.dp))
+                answers.forEach { answer ->
+                    Text(text = "- $answer", fontSize = 12.sp, color = Color(0xFF616161), lineHeight = 18.sp)
+                }
+            }
             if (score >= 0) {
                 Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "BBTV verification score: $score/8",
-                    fontSize = 11.sp,
-                    color = Color(0xFF757575)
-                )
+                Text(text = "BBTV verification score: $score/8", fontSize = 11.sp, color = Color(0xFF757575))
             }
         }
     }
