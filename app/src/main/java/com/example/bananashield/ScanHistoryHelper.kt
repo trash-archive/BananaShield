@@ -41,7 +41,11 @@ data class ScanHistory(
     val timestamp: Long = System.currentTimeMillis(),
     val imageUrl: String = "",
     val location: String = "",
-    val notes: String = ""
+    val notes: String = "",
+
+    // BBTV Questionnaire
+    val bbtvVerdict: String = "",
+    val bbtvScore: Int = -1
 )
 
 object ScanHistoryHelper {
@@ -154,6 +158,10 @@ object ScanHistoryHelper {
                         "location" to location,
                         "notes" to notes,
 
+                        // BBTV Questionnaire
+                        "bbtvVerdict" to (classification.bbtvVerdict?.name ?: ""),
+                        "bbtvScore" to classification.bbtvScore,
+
                         // Additional metadata for admin dashboard
                         "createdAt" to com.google.firebase.Timestamp.now(),
                         "deviceInfo" to android.os.Build.MODEL,
@@ -243,7 +251,9 @@ object ScanHistoryHelper {
                             timestamp = doc.getLong("timestamp") ?: 0L,
                             imageUrl = doc.getString("imageUrl") ?: "",
                             location = doc.getString("location") ?: "",
-                            notes = doc.getString("notes") ?: ""
+                            notes = doc.getString("notes") ?: "",
+                            bbtvVerdict = doc.getString("bbtvVerdict") ?: "",
+                            bbtvScore = doc.getLong("bbtvScore")?.toInt() ?: -1
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "❌ Error parsing document: ${e.message}")
@@ -292,7 +302,9 @@ object ScanHistoryHelper {
                             timestamp = document.getLong("timestamp") ?: 0L,
                             imageUrl = document.getString("imageUrl") ?: "",
                             location = document.getString("location") ?: "",
-                            notes = document.getString("notes") ?: ""
+                            notes = document.getString("notes") ?: "",
+                            bbtvVerdict = document.getString("bbtvVerdict") ?: "",
+                            bbtvScore = document.getLong("bbtvScore")?.toInt() ?: -1
                         )
 
                         Log.d(TAG, "✅ Successfully fetched scan: ${scanHistory.diseaseName}")

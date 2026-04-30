@@ -11,7 +11,9 @@ data class Classification(
     val label: String,
     val confidence: Float,
     val allConfidences: Map<String, Float> = emptyMap(),
-    val diseaseInfo: DiseaseInfo
+    val diseaseInfo: DiseaseInfo,
+    val bbtvVerdict: BBTVVerdict? = null,
+    val bbtvScore: Int = -1
 )
 
 data class DiseaseInfo(
@@ -209,80 +211,92 @@ class BananaClassifier(private val context: Context) {
                 severity = "Severe - Highly Contagious",
                 confidenceLevel = "${(confidence * 100).toInt()}%",
                 symptoms = listOf(
-                    "Dark green streaks on leaf stems and midribs",
-                    "Stunted growth with bunched leaves at top",
-                    "Narrow, brittle, and upright leaves",
-                    "No fruit production in infected plants"
+                    "Dark green 'dot-dash' streaks on the midrib, petiole, and leaf stem — the most definitive sign of BBTV",
+                    "Leaves progressively become shorter, narrower, and more upright with each new emergence",
+                    "Leaf margins roll upward and leaves feel stiff or brittle",
+                    "Severely stunted plant with leaves bunched tightly at the top (bunchy top appearance)",
+                    "Chlorosis (yellowing) along leaf margins, especially on younger leaves",
+                    "No fruit production — infected plants rarely reach flowering stage"
                 ),
                 causes = listOf(
-                    "Transmitted by banana aphids (Pentalonia nigronervosa)",
-                    "Spread through infected planting material",
-                    "Movement of infected plants between areas",
-                    "Aphid vectors moving from infected plants"
+                    "Primary vector: banana aphid (Pentalonia nigronervosa) — transmits the virus from infected to healthy plants",
+                    "Use of infected suckers or cuttings taken from a BBTV-positive plant or farm",
+                    "Movement of infected planting material between farms or regions",
+                    "Aphid colonies spreading from nearby infected plants or weeds hosting aphids"
                 ),
                 treatmentSteps = listOf(
                     TreatmentStep(
-                        "Immediate Plant Removal",
-                        "Remove and destroy infected plants immediately to prevent spread. Dig out entire root system",
+                        "Confirm Before Acting",
+                        "Do NOT uproot immediately. Verify at least 3 key signs: dot-dash streaking on midrib, progressive worsening, and multiple plants affected. Uprooting a healthy plant is irreversible.",
                         "remove"
                     ),
                     TreatmentStep(
-                        "Aphid Control",
-                        "Apply systemic insecticides to control aphid vectors. Treat surrounding healthy plants",
+                        "Isolate the Affected Plant",
+                        "Prevent people, tools, and animals from moving between the suspected plant and healthy ones. Do not take suckers from this plant.",
+                        "quarantine"
+                    ),
+                    TreatmentStep(
+                        "Control Aphid Vectors Immediately",
+                        "Apply a systemic insecticide (e.g., imidacloprid) to the affected plant and all plants within 5 meters to eliminate aphid vectors before they spread the virus further.",
                         "insecticide"
+                    ),
+                    TreatmentStep(
+                        "Remove and Destroy Confirmed Infected Plants",
+                        "Once BBTV is confirmed, inject the pseudostem with kerosene or glyphosate to kill the plant in place, then dig out the entire corm and root system. Do not leave debris.",
+                        "remove"
                     )
                 ),
                 preventiveMeasures = listOf(
                     PreventiveMeasure(
                         "cultural",
-                        "Cultural Practices",
+                        "Use Clean Planting Material",
                         listOf(
-                            "Use only virus-free certified planting material",
-                            "Remove all infected plants immediately",
-                            "Maintain weed-free environment",
-                            "Isolate new plants before planting"
+                            "Only use suckers or tissue-cultured plants from certified BBTV-free sources",
+                            "Never take planting material from farms with unknown disease history",
+                            "Inspect new planting material for dot-dash streaking before planting",
+                            "Quarantine new plants for 2–4 weeks before introducing to your farm"
                         ),
                         "plant"
                     ),
                     PreventiveMeasure(
                         "chemical",
-                        "Vector Control",
+                        "Aphid Vector Control",
                         listOf(
-                            "Apply systemic insecticides for aphid control",
-                            "Use reflective mulches to deter aphids",
-                            "Monitor aphid populations regularly",
-                            "Treat buffer zones around plantations"
+                            "Apply systemic insecticides (imidacloprid or thiamethoxam) at planting and every 3 months",
+                            "Use reflective silver mulch around plants to deter aphid landing",
+                            "Inspect the base of pseudostems regularly for aphid colonies",
+                            "Treat a buffer zone of at least 10 meters around any suspected plant"
                         ),
                         "spray"
                     ),
                     PreventiveMeasure(
-                        "resistant",
-                        "Resistant Varieties",
-                        listOf(
-                            "Plant BBTV-resistant banana cultivars",
-                            "Consider hybrid varieties with tolerance",
-                            "Research local resistant varieties",
-                            "Consult agricultural extension services"
-                        ),
-                        "variety"
-                    ),
-                    PreventiveMeasure(
                         "monitoring",
-                        "Early Detection",
+                        "Early Detection & Surveillance",
                         listOf(
-                            "Inspect plants weekly for symptoms",
-                            "Monitor aphid activity closely",
-                            "Mark and track suspicious plants",
-                            "Report outbreaks to authorities immediately"
+                            "Walk your plantation weekly and look specifically for dot-dash streaking on midribs",
+                            "Mark any suspicious plant with a stake and monitor it for 1–2 weeks before deciding",
+                            "Keep a simple record of which plants were checked and when",
+                            "Report confirmed or suspected BBTV to your local agricultural office immediately"
                         ),
                         "monitor"
+                    ),
+                    PreventiveMeasure(
+                        "biosecurity",
+                        "Farm Biosecurity",
+                        listOf(
+                            "Disinfect cutting tools with 10% bleach solution between each plant",
+                            "Do not share tools between farms without disinfecting",
+                            "Limit visitor access to your plantation during an outbreak",
+                            "Remove and destroy weed hosts that may harbor aphids near the plantation"
+                        ),
+                        "security"
                     )
                 ),
                 safetyNotes = listOf(
-                    "Disinfect tools between plants to prevent spread",
-                    "Burn or bury infected plant material deeply",
-                    "Do not compost infected plants",
-                    "Follow biosecurity protocols when moving between plantations"
+                    "Do not uproot a plant based on the AI scan alone — confirm with the dot-dash streak sign and questionnaire result first",
+                    "Burn or bury destroyed plant material at least 50 cm deep — do not compost",
+                    "Wear gloves when handling suspected infected plants and disinfect afterward",
+                    "BBTV is a notifiable disease in many countries — contact your agricultural extension officer if confirmed"
                 )
             )
 

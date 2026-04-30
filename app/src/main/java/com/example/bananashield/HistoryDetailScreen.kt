@@ -217,6 +217,15 @@ fun HistoryDetailScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                     }
 
+                    // BBTV verdict banner
+                    if (scanHistory.diseaseName.contains("Bunchy Top", ignoreCase = true) && scanHistory.bbtvVerdict.isNotEmpty()) {
+                        HistoryBBTVVerdictBanner(
+                            verdictString = scanHistory.bbtvVerdict,
+                            score = scanHistory.bbtvScore
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
                     if (scanHistory.symptoms.isNotEmpty()) {
                         HistorySubtleInfoSection(
                             title = "Identified Symptoms",
@@ -396,15 +405,38 @@ fun HistorySubtleDiseaseCard(
                 )
 
                 HistorySubtleMetricChip(
-                    label = "Type",
-                    value = scanHistory.diseaseType,
-                    icon = Icons.Default.Category,
-                    accentColor = if (isHealthy)
-                        Color(0xFF66BB6A)
-                    else
-                        Color(0xFFFF7043),
+                    label = "Severity",
+                    value = scanHistory.severity,
+                    icon = Icons.Default.ErrorOutline,
+                    accentColor = if (isHealthy) Color(0xFF66BB6A)
+                    else when {
+                        scanHistory.severity.contains("Critical", ignoreCase = true) -> Color(0xFFB71C1C)
+                        scanHistory.severity.contains("Severe", ignoreCase = true) -> Color(0xFFEF5350)
+                        scanHistory.severity.contains("Moderate", ignoreCase = true) -> Color(0xFFFF9800)
+                        else -> Color(0xFF66BB6A)
+                    },
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            // BBTV likelihood chip — only for BBTV scans with a saved verdict
+            if (scanHistory.diseaseName.contains("Bunchy Top", ignoreCase = true) && scanHistory.bbtvVerdict.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                val verdict = runCatching { BBTVVerdict.valueOf(scanHistory.bbtvVerdict) }.getOrNull()
+                if (verdict != null) {
+                    val (likelihoodLabel, likelihoodColor) = when (verdict) {
+                        BBTVVerdict.HIGH -> "High Likelihood" to Color(0xFFEF5350)
+                        BBTVVerdict.MODERATE -> "Possible BBTV" to Color(0xFFFF9800)
+                        BBTVVerdict.LOW -> "Low Likelihood" to Color(0xFF4CAF50)
+                    }
+                    HistorySubtleMetricChip(
+                        label = "BBTV Likelihood",
+                        value = likelihoodLabel,
+                        icon = Icons.Default.BugReport,
+                        accentColor = likelihoodColor,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -710,6 +742,81 @@ fun HistoryClassBreakdownCard(allConfidences: Map<String, Float>) {
                         modifier = Modifier.width(34.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun HistoryBBTVVerdictBanner(
+    verdictString: String,
+    score: Int
+) {
+    val verdict = runCatching { BBTVVerdict.valueOf(verdictString) }.getOrNull() ?: return
+
+    val (backgroundColor, borderColor, icon, title, message) = when (verdict) {
+        BBTVVerdict.HIGH -> Tuple5(
+            Color(0xFFFFEBEE),
+            Color(0xFFEF5350),
+            Icons.Default.Warning,
+            "High BBTV Likelihood",
+            "Multiple key indicators were present at the time of scan. Isolate this plant, control aphids in the surrounding area, and contact your local agricultural officer before uprooting."
+        )
+        BBTVVerdict.MODERATE -> Tuple5(
+            Color(0xFFFFF3E0),
+            Color(0xFFFF9800),
+            Icons.Default.Info,
+            "Possible BBTV — Monitor Closely",
+            "Some indicators were present but not conclusive at the time of scan. Continue monitoring this plant and rescan if symptoms worsen or spread to nearby plants."
+        )
+        BBTVVerdict.LOW -> Tuple5(
+            Color(0xFFE8F5E9),
+            Color(0xFF4CAF50),
+            Icons.Default.CheckCircle,
+            "Low BBTV Likelihood",
+            "Symptoms were more consistent with nutrient deficiency, water stress, or normal slow growth at the time of scan. Check soil conditions and fertilization."
+        )
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = borderColor,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = borderColor
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                fontSize = 13.sp,
+                color = Color(0xFF424242),
+                lineHeight = 19.sp
+            )
+            if (score >= 0) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "BBTV verification score: $score/8",
+                    fontSize = 11.sp,
+                    color = Color(0xFF757575)
+                )
             }
         }
     }

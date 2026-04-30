@@ -65,6 +65,12 @@ fun ResultsScreen(
     var showImageViewer by remember { mutableStateOf(false) }
     var scanTimestamp by remember { mutableStateOf(System.currentTimeMillis()) }
 
+    // BBTV questionnaire state
+    val isBBTV = classification?.label?.contains("Bunchy Top", ignoreCase = true) == true
+    var showBBTVQuestionnaire by remember { mutableStateOf(isBBTV) }
+    var bbtvResult by remember { mutableStateOf<BBTVQuestionnaireResult?>(null) }
+    var finalClassification by remember { mutableStateOf(classification) }
+
     val density = LocalDensity.current
     val statusBarHeight = WindowInsets.statusBars.getTop(density) / density.density
     val navigationBarHeight = WindowInsets.navigationBars.getBottom(density) / density.density
@@ -73,15 +79,34 @@ fun ResultsScreen(
         onScanAgain()
     }
 
+    // Show BBTV questionnaire before results
+    if (showBBTVQuestionnaire) {
+        BBTVQuestionnaireScreen(
+            onComplete = { result ->
+                bbtvResult = result
+                finalClassification = classification?.copy(
+                    bbtvVerdict = result.verdict,
+                    bbtvScore = result.score
+                )
+                showBBTVQuestionnaire = false
+            },
+            onSkip = {
+                finalClassification = classification
+                showBBTVQuestionnaire = false
+            }
+        )
+        return
+    }
+
     LaunchedEffect(Unit) {
         scanTimestamp = System.currentTimeMillis()
 
-        if (bitmap != null && classification != null && !hasSaved) {
+        if (bitmap != null && finalClassification != null && !hasSaved) {
             ScanHistoryHelper.saveScanResult(
                 bitmap = bitmap,
-                classification = classification,
+                classification = finalClassification!!,
                 location = "",
-                notes = if (classification.confidence < CONFIDENCE_MODERATE)
+                notes = if (finalClassification!!.confidence < CONFIDENCE_MODERATE)
                     "Low confidence scan - may require verification" else "",
                 onSuccess = { documentId ->
                     showSaveSuccess = true
@@ -89,8 +114,8 @@ fun ResultsScreen(
 
                     SystemNotificationHelper.showScanCompletedNotification(
                         context = context,
-                        diseaseName = classification.diseaseInfo.name,
-                        confidence = classification.confidence,
+                        diseaseName = finalClassification!!.diseaseInfo.name,
+                        confidence = finalClassification!!.confidence,
                         scanId = documentId
                     )
 
@@ -98,8 +123,8 @@ fun ResultsScreen(
                         NotificationHelper.notifyScanComplete(
                             userId = userId,
                             scanId = documentId,
-                            diseaseName = classification.diseaseInfo.name,
-                            confidence = classification.confidence
+                            diseaseName = finalClassification!!.diseaseInfo.name,
+                            confidence = finalClassification!!.confidence
                         )
                     }
                 },
@@ -117,17 +142,17 @@ fun ResultsScreen(
         )
     }
 
-    if (showTreatmentDetails && classification != null) {
+    if (showTreatmentDetails && finalClassification != null) {
         TreatmentDetailsScreen(
-            diseaseInfo = classification.diseaseInfo,
+            diseaseInfo = finalClassification!!.diseaseInfo,
             onBack = { showTreatmentDetails = false }
         )
         return
     }
 
-    if (showPreventionDetails && classification != null) {
+    if (showPreventionDetails && finalClassification != null) {
         PreventionDetailsScreen(
-            diseaseInfo = classification.diseaseInfo,
+            diseaseInfo = finalClassification!!.diseaseInfo,
             onBack = { showPreventionDetails = false }
         )
         return
@@ -276,6 +301,12 @@ fun ResultsScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // BBTV verdict banner
+                if (isBBTV && bbtvResult != null) {
+                    BBTVVerdictBanner(bbtvResult = bbtvResult!!)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
                 // Class breakdown for transparency
                 if (result.allConfidences.isNotEmpty()) {
                     ClassBreakdownCard(allConfidences = result.allConfidences)
@@ -285,7 +316,8 @@ fun ResultsScreen(
                 SubtleDiseaseCard(
                     result = result,
                     info = info,
-                    timestamp = scanTimestamp
+                    timestamp = scanTimestamp,
+                    bbtvVerdict = finalClassification?.bbtvVerdict
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -569,9 +601,11 @@ data class Tuple5<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: 
 fun SubtleDiseaseCard(
     result: Classification,
     info: DiseaseInfo,
-    timestamp: Long
+    timestamp: Long,
+    bbtvVerdict: BBTVVerdict? = null
 ) {
     val isHealthy = result.label.contains("Healthy", ignoreCase = true)
+    val isBBTV = result.label.contains("Bunchy Top", ignoreCase = true)
 
     Card(
         modifier = Modifier
@@ -587,24 +621,15 @@ fun SubtleDiseaseCard(
                     modifier = Modifier
                         .size(56.dp)
                         .background(
-                            color = if (isHealthy)
-                                Color(0xFFE8F5E9)
-                            else
-                                Color(0xFFFFF3E0),
+                            color = if (isHealthy) Color(0xFFE8F5E9) else Color(0xFFFFF3E0),
                             shape = CircleShape
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (isHealthy)
-                            Icons.Default.CheckCircle
-                        else
-                            Icons.Default.WarningAmber,
+                        imageVector = if (isHealthy) Icons.Default.CheckCircle else Icons.Default.WarningAmber,
                         contentDescription = null,
-                        tint = if (isHealthy)
-                            Color(0xFF66BB6A)
-                        else
-                            Color(0xFFFF9800),
+                        tint = if (isHealthy) Color(0xFF66BB6A) else Color(0xFFFF9800),
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -628,6 +653,7 @@ fun SubtleDiseaseCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Row 1: AI Confidence + Severity
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -645,14 +671,34 @@ fun SubtleDiseaseCard(
                 )
 
                 SubtleMetricChip(
-                    label = "Type",
-                    value = info.diseaseType,
-                    icon = Icons.Default.Category,
-                    accentColor = if (isHealthy)
-                        Color(0xFF66BB6A)
-                    else
-                        Color(0xFFFF7043),
+                    label = "Severity",
+                    value = info.severity,
+                    icon = Icons.Default.ErrorOutline,
+                    accentColor = if (isHealthy) Color(0xFF66BB6A)
+                    else when {
+                        info.severity.contains("Critical", ignoreCase = true) -> Color(0xFFB71C1C)
+                        info.severity.contains("Severe", ignoreCase = true) -> Color(0xFFEF5350)
+                        info.severity.contains("Moderate", ignoreCase = true) -> Color(0xFFFF9800)
+                        else -> Color(0xFF66BB6A)
+                    },
                     modifier = Modifier.weight(1f)
+                )
+            }
+
+            // Row 2: BBTV likelihood chip (only for BBTV scans with a verdict)
+            if (isBBTV && bbtvVerdict != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                val (likelihoodLabel, likelihoodColor) = when (bbtvVerdict) {
+                    BBTVVerdict.HIGH -> "High Likelihood" to Color(0xFFEF5350)
+                    BBTVVerdict.MODERATE -> "Possible BBTV" to Color(0xFFFF9800)
+                    BBTVVerdict.LOW -> "Low Likelihood" to Color(0xFF4CAF50)
+                }
+                SubtleMetricChip(
+                    label = "BBTV Likelihood",
+                    value = likelihoodLabel,
+                    icon = Icons.Default.BugReport,
+                    accentColor = likelihoodColor,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
@@ -975,4 +1021,72 @@ fun ClassBreakdownCard(allConfidences: Map<String, Float>) {
 fun formatDetailedTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+@Composable
+fun BBTVVerdictBanner(bbtvResult: BBTVQuestionnaireResult) {
+    val (backgroundColor, borderColor, icon, title, message) = when (bbtvResult.verdict) {
+        BBTVVerdict.HIGH -> Tuple5(
+            Color(0xFFFFEBEE),
+            Color(0xFFEF5350),
+            Icons.Default.Warning,
+            "High BBTV Likelihood",
+            "Multiple key indicators are present. Isolate this plant immediately, control aphids in the surrounding area, and contact your local agricultural officer before uprooting."
+        )
+        BBTVVerdict.MODERATE -> Tuple5(
+            Color(0xFFFFF3E0),
+            Color(0xFFFF9800),
+            Icons.Default.Info,
+            "Possible BBTV — Monitor Closely",
+            "Some indicators are present but not conclusive. Monitor this plant for 7–14 days. If symptoms worsen or spread to nearby plants, rescan and consult an agricultural technician."
+        )
+        BBTVVerdict.LOW -> Tuple5(
+            Color(0xFFE8F5E9),
+            Color(0xFF4CAF50),
+            Icons.Default.CheckCircle,
+            "Low BBTV Likelihood",
+            "Symptoms are more consistent with nutrient deficiency, water stress, or normal slow growth. Check soil conditions, irrigation, and fertilization before taking any action."
+        )
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = borderColor,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = borderColor
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                fontSize = 13.sp,
+                color = Color(0xFF424242),
+                lineHeight = 19.sp
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Based on your answers  •  Verification score: ${bbtvResult.score}/8",
+                fontSize = 11.sp,
+                color = Color(0xFF757575)
+            )
+        }
+    }
 }
