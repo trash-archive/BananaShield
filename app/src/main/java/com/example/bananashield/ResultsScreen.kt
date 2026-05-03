@@ -11,6 +11,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontStyle
@@ -51,7 +53,8 @@ private const val CONFIDENCE_LOW = 0.40f
 fun ResultsScreen(
     bitmap: Bitmap?,
     classification: Classification?,
-    onScanAgain: () -> Unit
+    onScanAgain: () -> Unit,
+    onAbortBBTV: () -> Unit = onScanAgain
 ) {
     val context = LocalContext.current
     val auth = Firebase.auth
@@ -94,10 +97,7 @@ fun ResultsScreen(
                 )
                 showBBTVQuestionnaire = false
             },
-            onSkip = {
-                finalClassification = classification
-                showBBTVQuestionnaire = false
-            }
+            onAbort = onAbortBBTV
         )
         return
     }
@@ -202,15 +202,33 @@ fun ResultsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Analysis Results",
-                                fontSize = 22.sp, // ✅ Increased from 20sp
-                                fontWeight = FontWeight.Bold, // ✅ Changed to Bold
-                                color = Color(0xFF1B5E20) // ✅ Changed to dark green
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1B5E20)
                             )
-                            Text(
-                                text = "Leaf health assessment",
-                                fontSize = 13.sp,
-                                color = Color(0xFF757575)
-                            )
+                            if (finalClassification?.plantLabel?.isNotEmpty() == true) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocalOffer,
+                                        contentDescription = null,
+                                        tint = Color(0xFF2E7D32),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = finalClassification!!.plantLabel,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF2E7D32),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "Leaf health assessment",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF757575)
+                                )
+                            }
                         }
 
                         // ✅ Save indicator remains on the right
@@ -295,6 +313,10 @@ fun ResultsScreen(
                 bitmap = bitmap,
                 onClick = { showImageViewer = true }
             )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            classification?.let { label -> SampleImagesCard(label = label.label) }
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -1091,6 +1113,182 @@ fun BBTVVerdictBanner(bbtvResult: BBTVQuestionnaireResult) {
                 fontSize = 11.sp,
                 color = Color(0xFF757575)
             )
+        }
+    }
+}
+
+@Composable
+fun SampleImagesCard(label: String) {
+    val allSamples = when {
+        label.contains("Healthy", ignoreCase = true) -> listOf(
+            R.drawable.sample_healthy_1,
+            R.drawable.sample_healthy_2,
+            R.drawable.sample_healthy_3,
+            R.drawable.sample_healthy_4,
+            R.drawable.sample_healthy_5,
+            R.drawable.sample_healthy_6
+        )
+        label.contains("Sigatoka", ignoreCase = true) -> listOf(
+            R.drawable.sample_black_sigatoka_1,
+            R.drawable.sample_black_sigatoka_2,
+            R.drawable.sample_black_sigatoka_3,
+            R.drawable.sample_black_sigatoka_4,
+            R.drawable.sample_black_sigatoka_5,
+            R.drawable.sample_black_sigatoka_6
+        )
+        label.contains("Bunchy Top", ignoreCase = true) -> listOf(
+            R.drawable.sample_bbtv_1,
+            R.drawable.sample_bbtv_2,
+            R.drawable.sample_bbtv_3,
+            R.drawable.sample_bbtv_4,
+            R.drawable.sample_bbtv_5,
+            R.drawable.sample_bbtv_6
+        )
+        label.contains("Fusarium", ignoreCase = true) || label.contains("TR4", ignoreCase = true) -> listOf(
+            R.drawable.sample_fusarium_1,
+            R.drawable.sample_fusarium_2,
+            R.drawable.sample_fusarium_3,
+            R.drawable.sample_fusarium_4,
+            R.drawable.sample_fusarium_5,
+            R.drawable.sample_fusarium_6
+        )
+        else -> emptyList()
+    }
+
+    if (allSamples.isEmpty()) return
+
+    // Pick 3 random samples — re-randomized each time this screen is shown
+    val displayed = remember(label) { allSamples.shuffled().take(3) }
+    var viewerRes by remember { mutableStateOf<Int?>(null) }
+
+    viewerRes?.let { res ->
+        SampleImageViewerDialog(resId = res, onDismiss = { viewerRes = null })
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = CircleShape, color = Color(0xFF8D6E63).copy(alpha = 0.15f)) {
+                    Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = null,
+                            tint = Color(0xFF8D6E63),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Reference Samples",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF212121)
+                    )
+                    Text(
+                        text = "Compare your image with known cases",
+                        fontSize = 11.sp,
+                        color = Color(0xFF757575)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 3 thumbnails in a horizontal row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                displayed.forEachIndexed { index, resId ->
+                    Box(
+                        modifier = Modifier
+                            .size(width = 110.dp, height = 90.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFF5F5F5))
+                            .clickable { viewerRes = resId }
+                    ) {
+                        Image(
+                            painter = painterResource(id = resId),
+                            contentDescription = "Sample ${index + 1}",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        // Tap-to-enlarge badge
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(5.dp)
+                                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ZoomIn,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Tap any image to enlarge",
+                fontSize = 10.sp,
+                color = Color(0xFF9E9E9E),
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun SampleImageViewerDialog(resId: Int, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable { onDismiss() }
+        ) {
+            Image(
+                painter = painterResource(id = resId),
+                contentDescription = "Sample image full view",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentScale = ContentScale.Fit
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.example.bananashield
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,11 +18,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 enum class BBTVVerdict { HIGH, MODERATE, LOW }
 
@@ -37,7 +42,7 @@ data class BBTVQuestionnaireResult(
 @Composable
 fun BBTVQuestionnaireScreen(
     onComplete: (BBTVQuestionnaireResult) -> Unit,
-    onSkip: () -> Unit
+    onAbort: () -> Unit
 ) {
     val density = LocalDensity.current
     val statusBarHeight = WindowInsets.statusBars.getTop(density) / density.density
@@ -50,7 +55,7 @@ fun BBTVQuestionnaireScreen(
     var aphidAnswer by remember { mutableStateOf("") }
 
     BackHandler {
-        if (currentStep > 0) currentStep-- else onSkip()
+        if (currentStep > 0) currentStep-- else onAbort()
     }
 
     Column(
@@ -72,7 +77,7 @@ fun BBTVQuestionnaireScreen(
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { if (currentStep > 0) currentStep-- else onSkip() }) {
+                    IconButton(onClick = { if (currentStep > 0) currentStep-- else onAbort() }) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Back",
@@ -91,13 +96,6 @@ fun BBTVQuestionnaireScreen(
                             text = "Question ${currentStep + 1} of 4",
                             fontSize = 13.sp,
                             color = Color(0xFF757575)
-                        )
-                    }
-                    TextButton(onClick = onSkip) {
-                        Text(
-                            text = "Skip",
-                            color = Color(0xFF9E9E9E),
-                            fontSize = 14.sp
                         )
                     }
                 }
@@ -226,6 +224,8 @@ private fun QuestionOne(selected: String, onSelect: (String) -> Unit) {
         stepNumber = 1,
         question = "Do you see dark green streaks or line patterns on the leaf stem or midrib?",
         hint = "Look closely at the main vein of the leaf and the stem connecting it to the plant.",
+        referenceImageRes = R.drawable.bbtv_streak_reference,
+        referenceImageCaption = "Example: dot-dash dark green streaks on the midrib",
         options = listOf(
             OptionItem("yes", "Yes, I can see streaks or lines", Icons.Default.Visibility),
             OptionItem("no", "No, I don't see any streaks", Icons.Default.VisibilityOff),
@@ -276,6 +276,8 @@ private fun QuestionFour(selected: String, onSelect: (String) -> Unit) {
         stepNumber = 4,
         question = "Check the base of the plant stem and where the leaves meet the stem. Do you see small dark brown or black insects clustered there?",
         hint = "Banana aphids are tiny, dark, and often found with ants nearby — ants protect them for their sticky secretion.",
+        referenceImageRes = R.drawable.bbtv_aphid_reference,
+        referenceImageCaption = "Example: banana aphids (Pentalonia nigronervosa) clustered at stem base",
         options = listOf(
             OptionItem("yes_insects", "Yes, I see small dark insects clustered there", Icons.Default.BugReport),
             OptionItem("ants_only", "I see ants but no small insects", Icons.Default.Warning),
@@ -296,8 +298,48 @@ private fun QuestionCard(
     hint: String,
     options: List<OptionItem>,
     selected: String,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    referenceImageRes: Int? = null,
+    referenceImageCaption: String = ""
 ) {
+    var showImageViewer by remember { mutableStateOf(false) }
+
+    if (showImageViewer && referenceImageRes != null) {
+        Dialog(
+            onDismissRequest = { showImageViewer = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .clickable { showImageViewer = false }
+            ) {
+                Image(
+                    painter = painterResource(id = referenceImageRes),
+                    contentDescription = referenceImageCaption,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentScale = ContentScale.Fit
+                )
+                IconButton(
+                    onClick = { showImageViewer = false },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        }
+    }
+
     Column {
         // Step badge + question
         Row(verticalAlignment = Alignment.Top) {
@@ -333,7 +375,79 @@ private fun QuestionCard(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Reference image — only shown when provided
+        if (referenceImageRes != null) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showImageViewer = true },
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1B5E20).copy(alpha = 0.06f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2E7D32).copy(alpha = 0.25f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Image,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "REFERENCE IMAGE",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2E7D32),
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "Tap to enlarge",
+                            fontSize = 10.sp,
+                            color = Color(0xFF757575)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ZoomIn,
+                            contentDescription = null,
+                            tint = Color(0xFF757575),
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    ) {
+                        Image(
+                            painter = painterResource(id = referenceImageRes),
+                            contentDescription = referenceImageCaption,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    if (referenceImageCaption.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(7.dp))
+                        Text(
+                            text = referenceImageCaption,
+                            fontSize = 11.sp,
+                            color = Color(0xFF616161),
+                            lineHeight = 15.sp,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         options.forEach { option ->
             val isSelected = selected == option.value

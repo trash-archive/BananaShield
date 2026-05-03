@@ -49,7 +49,10 @@ data class ScanHistory(
     val bbtvStreakAnswer: String = "",
     val bbtvTimelineAnswer: String = "",
     val bbtvSpreadAnswer: String = "",
-    val bbtvAphidAnswer: String = ""
+    val bbtvAphidAnswer: String = "",
+
+    // Plant identification
+    val plantLabel: String = ""
 )
 
 object ScanHistoryHelper {
@@ -170,6 +173,9 @@ object ScanHistoryHelper {
                         "bbtvSpreadAnswer" to classification.bbtvSpreadAnswer,
                         "bbtvAphidAnswer" to classification.bbtvAphidAnswer,
 
+                        // Plant identification
+                        "plantLabel" to classification.plantLabel,
+
                         // Additional metadata for admin dashboard
                         "createdAt" to com.google.firebase.Timestamp.now(),
                         "deviceInfo" to android.os.Build.MODEL,
@@ -265,7 +271,8 @@ object ScanHistoryHelper {
                             bbtvStreakAnswer = doc.getString("bbtvStreakAnswer") ?: "",
                             bbtvTimelineAnswer = doc.getString("bbtvTimelineAnswer") ?: "",
                             bbtvSpreadAnswer = doc.getString("bbtvSpreadAnswer") ?: "",
-                            bbtvAphidAnswer = doc.getString("bbtvAphidAnswer") ?: ""
+                            bbtvAphidAnswer = doc.getString("bbtvAphidAnswer") ?: "",
+                            plantLabel = doc.getString("plantLabel") ?: ""
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "❌ Error parsing document: ${e.message}")
@@ -320,7 +327,8 @@ object ScanHistoryHelper {
                             bbtvStreakAnswer = document.getString("bbtvStreakAnswer") ?: "",
                             bbtvTimelineAnswer = document.getString("bbtvTimelineAnswer") ?: "",
                             bbtvSpreadAnswer = document.getString("bbtvSpreadAnswer") ?: "",
-                            bbtvAphidAnswer = document.getString("bbtvAphidAnswer") ?: ""
+                            bbtvAphidAnswer = document.getString("bbtvAphidAnswer") ?: "",
+                            plantLabel = document.getString("plantLabel") ?: ""
                         )
 
                         Log.d(TAG, "✅ Successfully fetched scan: ${scanHistory.diseaseName}")

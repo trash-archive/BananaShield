@@ -42,6 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 
 @Composable
@@ -88,16 +91,6 @@ fun ModernCameraScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var classification by remember { mutableStateOf<Classification?>(null) }
-    var isAnalyzing by remember { mutableStateOf(false) }
-    var showResults by remember { mutableStateOf(false) }
-    var flashEnabled by remember { mutableStateOf(false) }
-    var showGuide by remember { mutableStateOf(false) }
-    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
-    var camera by remember { mutableStateOf<Camera?>(null) }
-
     val classifier = remember { BananaClassifier(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val previewView = remember {
@@ -106,6 +99,29 @@ fun ModernCameraScreen(
         }
     }
 
+    var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var classification by remember { mutableStateOf<Classification?>(null) }
+    var isAnalyzing by remember { mutableStateOf(false) }
+    var showResults by remember { mutableStateOf(false) }
+    var plantLabel by remember { mutableStateOf("") }
+
+    // Run classify off the main thread when isAnalyzing is set to true
+    LaunchedEffect(isAnalyzing) {
+        if (isAnalyzing && previewBitmap != null) {
+            classification = withContext(Dispatchers.Default) {
+                classifier.classify(previewBitmap!!)
+            }.copy(plantLabel = plantLabel)
+            capturedBitmap = previewBitmap
+            isAnalyzing = false
+            showResults = true
+        }
+    }
+
+    var flashEnabled by remember { mutableStateOf(false) }
+    var showGuide by remember { mutableStateOf(false) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var liveValidation by remember { mutableStateOf<LeafValidation>(LeafValidation.Pending) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
 
     // Gallery picker
@@ -169,14 +185,29 @@ fun ModernCameraScreen(
 
                 imageCapture = newImageCapture
 
+                val imageAnalysis = androidx.camera.core.ImageAnalysis.Builder()
+                    .setBackpressureStrategy(androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .also { analysis ->
+                        analysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                            val bitmap = imageProxy.toBitmap()
+                            val rotated = rotateBitmap(bitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
+                            // runBlocking is safe here — cameraExecutor is a background thread
+                            val result = runBlocking { classifier.validateLeaf(rotated) }
+                            liveValidation = result
+                            imageProxy.close()
+                        }
+                    }
+
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                 provider.unbindAll()
-                camera = provider.bindToLifecycle(
+                provider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
                     preview,
-                    newImageCapture
+                    newImageCapture,
+                    imageAnalysis
                 )
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -200,6 +231,14 @@ fun ModernCameraScreen(
                         capturedBitmap = null
                         previewBitmap = null
                         classification = null
+                        plantLabel = ""
+                    },
+                    onAbortBBTV = {
+                        // Back from BBTV questionnaire — return to image preview, don't save
+                        showResults = false
+                        capturedBitmap = null
+                        classification = null
+                        // previewBitmap intentionally kept so ImagePreviewMode is shown
                     }
                 )
             }
@@ -207,16 +246,14 @@ fun ModernCameraScreen(
                 ImagePreviewMode(
                     bitmap = previewBitmap!!,
                     isAnalyzing = isAnalyzing,
+                    plantLabel = plantLabel,
+                    onPlantLabelChange = { plantLabel = it },
                     onBack = {
                         previewBitmap = null
                         capturedBitmap = null
                     },
                     onAnalyze = {
                         isAnalyzing = true
-                        classification = classifier.classify(previewBitmap!!)
-                        capturedBitmap = previewBitmap
-                        isAnalyzing = false
-                        showResults = true
                     }
                 )
             }
@@ -224,6 +261,7 @@ fun ModernCameraScreen(
                 CameraMode(
                     previewView = previewView,
                     flashEnabled = flashEnabled,
+                    liveValidation = liveValidation,
                     onFlashToggle = { flashEnabled = !flashEnabled },
                     onBack = onNavigateBack,
                     onShowGuide = { showGuide = true },
@@ -267,6 +305,7 @@ fun ModernCameraScreen(
 fun CameraMode(
     previewView: PreviewView,
     flashEnabled: Boolean,
+    liveValidation: LeafValidation,
     onFlashToggle: () -> Unit,
     onBack: () -> Unit,
     onShowGuide: () -> Unit,
@@ -311,16 +350,26 @@ fun CameraMode(
                 )
         )
 
-        // Disclaimer pill overlay
+        // Live validation overlay pill
+        val (pillColor, pillText, pillIcon) = when (liveValidation) {
+            is LeafValidation.Valid ->
+                Triple(Color(0xFF2E7D32), "Banana leaf detected", Icons.Default.CheckCircle)
+            is LeafValidation.RejectedByObject ->
+                Triple(Color(0xFFB71C1C), "Not a banana leaf: ${liveValidation.detectedLabel}", Icons.Default.Warning)
+            is LeafValidation.RejectedByConfidence ->
+                Triple(Color(0xFFE65100), "No banana leaf detected", Icons.Default.Warning)
+            is LeafValidation.Pending ->
+                Triple(Color(0xFF424242), "Point camera at a banana leaf to scan", Icons.Default.Eco)
+        }
         Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = (navigationBarHeight + 120).dp)
+                .align(Alignment.TopCenter)
+                .padding(top = 100.dp)
                 .background(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
-                            Color(0xFF1B5E20).copy(alpha = 0.85f),
-                            Color(0xFF2E7D32).copy(alpha = 0.85f)
+                            pillColor.copy(alpha = 0.85f),
+                            pillColor.copy(alpha = 0.75f)
                         )
                     ),
                     shape = RoundedCornerShape(50.dp)
@@ -337,7 +386,7 @@ fun CameraMode(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Eco,
+                        imageVector = pillIcon,
                         contentDescription = null,
                         tint = Color(0xFFA5D6A7),
                         modifier = Modifier.size(15.dp)
@@ -345,7 +394,7 @@ fun CameraMode(
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "Point camera at a banana leaf to scan",
+                    text = pillText,
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -434,18 +483,19 @@ fun CameraMode(
 
                     Surface(
                         shape = CircleShape,
-                        color = Color(0xFFFFD54F),
+                        color = if (liveValidation is LeafValidation.Valid) Color(0xFFFFD54F) else Color(0xFF616161),
                         shadowElevation = 8.dp,
                         modifier = Modifier.size(80.dp)
                     ) {
                         IconButton(
                             onClick = onCapture,
+                            enabled = liveValidation is LeafValidation.Valid,
                             modifier = Modifier.fillMaxSize()
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Camera,
                                 contentDescription = "Capture",
-                                tint = Color(0xFF1B5E20),
+                                tint = if (liveValidation is LeafValidation.Valid) Color(0xFF1B5E20) else Color(0xFF9E9E9E),
                                 modifier = Modifier.size(40.dp)
                             )
                         }
@@ -475,11 +525,76 @@ fun CameraMode(
 fun ImagePreviewMode(
     bitmap: Bitmap,
     isAnalyzing: Boolean,
+    plantLabel: String,
+    onPlantLabelChange: (String) -> Unit,
     onBack: () -> Unit,
     onAnalyze: () -> Unit
 ) {
     val density = LocalDensity.current
     val navigationBarHeight = WindowInsets.navigationBars.getBottom(density) / density.density
+    val statusBarHeight = WindowInsets.statusBars.getTop(density) / density.density
+    var showLabelInfo by remember { mutableStateOf(false) }
+
+    if (showLabelInfo) {
+        AlertDialog(
+            onDismissRequest = { showLabelInfo = false },
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(Color(0xFFE8F5E9), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocalOffer,
+                        contentDescription = null,
+                        tint = Color(0xFF2E7D32),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            },
+            title = {
+                Text(
+                    text = "Why label your plant?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "A plant label helps you identify which specific banana plant this scan belongs to — especially useful when you have many plants in your farm.",
+                        fontSize = 14.sp,
+                        color = Color(0xFF424242),
+                        lineHeight = 20.sp
+                    )
+                    Text(
+                        text = "Examples: \"Row 3, Plant 7\", \"Near the fence\", \"Sucker from Plant A\"",
+                        fontSize = 13.sp,
+                        color = Color(0xFF757575),
+                        lineHeight = 19.sp
+                    )
+                    Text(
+                        text = "The label will appear in your scan history so you can quickly find and track the health of each plant over time.",
+                        fontSize = 14.sp,
+                        color = Color(0xFF424242),
+                        lineHeight = 20.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showLabelInfo = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Got it!", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
@@ -489,15 +604,34 @@ fun ImagePreviewMode(
             contentScale = ContentScale.Fit
         )
 
+        // Dark scrim
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.3f))
+                .background(Color.Black.copy(alpha = 0.35f))
         )
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            Spacer(modifier = Modifier.height(40.dp))
+        // Top gradient for readability
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height((statusBarHeight + 160).dp)
+                .align(Alignment.TopCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent)
+                    )
+                )
+        )
 
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = statusBarHeight.dp)
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── Top bar: back + title ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -505,10 +639,7 @@ fun ImagePreviewMode(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.2f)
-                ) {
+                Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.2f)) {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -518,19 +649,101 @@ fun ImagePreviewMode(
                         )
                     }
                 }
-
                 Text(
                     text = "Preview",
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
-
                 Box(modifier = Modifier.size(48.dp))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ── Plant label field ──
+            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Text(
+                    text = "PLANT LABEL",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFA5D6A7),
+                    letterSpacing = 1.2.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF1B5E20).copy(alpha = 0.82f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.5.dp,
+                        color = Color(0xFF66BB6A).copy(alpha = 0.7f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocalOffer,
+                            contentDescription = null,
+                            tint = Color(0xFF81C784),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = plantLabel,
+                            onValueChange = onPlantLabelChange,
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 10.dp, top = 13.dp, bottom = 13.dp),
+                            decorationBox = { inner ->
+                                if (plantLabel.isEmpty()) {
+                                    Text(
+                                        text = "e.g. Row 3, Plant 7",
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        fontSize = 15.sp
+                                    )
+                                }
+                                inner()
+                            }
+                        )
+                        if (plantLabel.isNotEmpty()) {
+                            IconButton(
+                                onClick = { onPlantLabelChange("") },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear",
+                                    tint = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        // Info button
+                        IconButton(
+                            onClick = { showLabelInfo = true },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "What is this?",
+                                tint = Color(0xFF81C784),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
+            // ── Analyze button ──
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

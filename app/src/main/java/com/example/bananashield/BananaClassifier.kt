@@ -3,9 +3,14 @@ package com.example.bananashield
 import android.content.Context
 import android.graphics.Bitmap
 import com.example.bananashield.ml.ModelUnquant
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 data class Classification(
     val label: String,
@@ -17,7 +22,8 @@ data class Classification(
     val bbtvStreakAnswer: String = "",
     val bbtvTimelineAnswer: String = "",
     val bbtvSpreadAnswer: String = "",
-    val bbtvAphidAnswer: String = ""
+    val bbtvAphidAnswer: String = "",
+    val plantLabel: String = ""
 )
 
 data class DiseaseInfo(
@@ -46,6 +52,62 @@ data class PreventiveMeasure(
     val icon: String
 )
 
+const val BANANA_CONFIDENCE_THRESHOLD = 0.60f
+
+/** Result of the two-gate validation. */
+sealed class LeafValidation {
+    object Pending : LeafValidation()
+    object Valid : LeafValidation()
+    data class RejectedByObject(val detectedLabel: String) : LeafValidation()
+    object RejectedByConfidence : LeafValidation()
+}
+
+/**
+ * ML Kit pre-filter: returns the top detected label if it belongs to a
+ * non-plant category, or null if the image looks plant/nature-related.
+ */
+object ObjectLabelChecker {
+
+    private val labeler = ImageLabeling.getClient(
+        ImageLabelerOptions.Builder().setConfidenceThreshold(0.70f).build()
+    )
+
+    // Categories that are clearly not banana leaves
+    private val blockedCategories = setOf(
+        // Furniture & home
+        "furniture", "chair", "table", "desk", "sofa", "couch", "bed", "shelf",
+        "cabinet", "drawer", "door", "window", "wall", "floor", "ceiling", "room",
+        "interior", "home", "house",
+        // Appliances & electronics
+        "appliance", "refrigerator", "microwave", "oven", "stove", "washing machine",
+        "television", "tv", "monitor", "computer", "laptop", "phone", "smartphone",
+        "keyboard", "mouse", "remote control", "camera",
+        // Vehicles
+        "vehicle", "car", "truck", "motorcycle", "bicycle", "bus", "train", "airplane",
+        // People
+        "person", "human", "face", "hand", "arm", "leg", "body part",
+        // Food & kitchenware
+        "food", "dish", "plate", "cup", "bottle", "glass", "cutlery", "fork", "spoon",
+        // Other objects
+        "paper", "book", "pen", "bag", "clothing", "shoe", "toy", "ball", "box",
+        "building", "road", "sky", "water", "animal", "dog", "cat"
+    )
+
+    suspend fun detectBlockedObject(bitmap: Bitmap): String? = suspendCoroutine { cont ->
+        val image = InputImage.fromBitmap(bitmap, 0)
+        labeler.process(image)
+            .addOnSuccessListener { labels ->
+                val blocked = labels.firstOrNull { label ->
+                    blockedCategories.any { blocked ->
+                        label.text.contains(blocked, ignoreCase = true)
+                    }
+                }
+                cont.resume(blocked?.text)
+            }
+            .addOnFailureListener { cont.resume(null) }
+    }
+}
+
 class BananaClassifier(private val context: Context) {
 
     private var model: ModelUnquant? = null
@@ -59,6 +121,28 @@ class BananaClassifier(private val context: Context) {
 
     init {
         model = ModelUnquant.newInstance(context)
+    }
+
+    /** Two-gate validation: ML Kit object check first, then TFLite confidence threshold. */
+    suspend fun validateLeaf(bitmap: Bitmap): LeafValidation {
+        // Gate 1: ML Kit — reject obvious non-plant objects
+        val blockedLabel = ObjectLabelChecker.detectBlockedObject(bitmap)
+        if (blockedLabel != null) return LeafValidation.RejectedByObject(blockedLabel)
+
+        // Gate 2: TFLite confidence threshold
+        val (valid, _) = isValidBananaLeaf(bitmap)
+        return if (valid) LeafValidation.Valid else LeafValidation.RejectedByConfidence
+    }
+
+    /** Returns true only if the top class confidence meets the threshold. */
+    fun isValidBananaLeaf(bitmap: Bitmap): Pair<Boolean, Float> {
+        val resizedBitmap = centerCropBitmap(bitmap)
+        val byteBuffer = convertBitmapToByteBuffer(resizedBitmap)
+        val inputFeature = TensorBuffer.createFixedSize(intArrayOf(1, 224, 224, 3), org.tensorflow.lite.DataType.FLOAT32)
+        inputFeature.loadBuffer(byteBuffer)
+        val confidences = model?.process(inputFeature)?.outputFeature0AsTensorBuffer?.floatArray ?: floatArrayOf()
+        val maxConf = confidences.maxOrNull() ?: 0f
+        return Pair(maxConf >= BANANA_CONFIDENCE_THRESHOLD, maxConf)
     }
 
     fun classify(bitmap: Bitmap): Classification {

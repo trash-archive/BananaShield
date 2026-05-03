@@ -94,6 +94,9 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite-metadata:0.4.4")
     implementation("org.tensorflow:tensorflow-lite-gpu:2.14.0")
 
+    // ML Kit Image Labeling (bundled — works offline)
+    implementation("com.google.mlkit:image-labeling:17.0.9")
+
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.5.0")
 
