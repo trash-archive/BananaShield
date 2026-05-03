@@ -305,6 +305,7 @@ fun ModernCameraScreen(
         // Guide Dialog
         if (showGuide) {
             ScanGuideDialog(
+                initialDontShowAgain = prefs.getBoolean(KEY_SKIP_GUIDE, false),
                 onDismiss = { showGuide = false },
                 onDontShowAgainChanged = { skip ->
                     prefs.edit().putBoolean(KEY_SKIP_GUIDE, skip).apply()
@@ -835,9 +836,9 @@ fun ImagePreviewMode(
 }
 
 @Composable
-fun ScanGuideDialog(onDismiss: () -> Unit, onDontShowAgainChanged: (Boolean) -> Unit) {
+fun ScanGuideDialog(initialDontShowAgain: Boolean = false, onDismiss: () -> Unit, onDontShowAgainChanged: (Boolean) -> Unit) {
     var viewerRes by remember { mutableStateOf<Int?>(null) }
-    var dontShowAgain by remember { mutableStateOf(false) }
+    var dontShowAgain by remember { mutableStateOf(initialDontShowAgain) }
 
     viewerRes?.let { res ->
         LookAlikeImageViewerDialog(resId = res, onDismiss = { viewerRes = null })

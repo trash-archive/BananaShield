@@ -512,37 +512,45 @@ private fun QuestionCard(
 private fun computeVerdict(streak: String, timeline: String, spread: String, aphid: String): BBTVQuestionnaireResult {
     var score = 0
 
-    // Q1: Streak — most definitive sign (max 2)
+    // Q1: Dot-dash streak — pathognomonic sign of BBTV, weighted heavily (max 3)
+    // Seeing it clearly is near-diagnostic on its own
     when (streak) {
-        "yes" -> score += 2
+        "yes"    -> score += 3
         "unsure" -> score += 1
+        // "no" -> 0, and acts as a cap (see below)
     }
 
-    // Q2: Timeline — BBTV always progresses (max 2)
+    // Q2: Timeline — BBTV always progressively worsens, never stays stable (max 2)
     when (timeline) {
-        "month_worse" -> score += 2
-        "weeks_worse" -> score += 2
+        "month_worse"  -> score += 2
+        "weeks_worse"  -> score += 2
         "weeks_stable" -> score += 1
+        // "new_stable" -> 0, too early to tell
     }
 
-    // Q3: Spread — BBTV clusters via aphids (max 2)
+    // Q3: Spread to nearby plants — BBTV spreads in clusters via aphid movement (max 2)
     when (spread) {
-        "multiple" -> score += 2
+        "multiple"   -> score += 2
         "one_or_two" -> score += 1
-        "unsure" -> score += 1
+        // "only_this" -> 0, isolated cases are less typical
+        // "unsure"    -> 0, no evidence either way
     }
 
-    // Q4: Aphid presence — confirms vector (max 2)
+    // Q4: Aphid presence — confirms vector but NOT the disease alone (max 1)
+    // Deliberately capped at 1: aphids alone should never push to HIGH
     when (aphid) {
-        "yes_insects" -> score += 2
-        "ants_only" -> score += 1
+        "yes_insects" -> score += 1
+        // "ants_only"  -> 0, ants without aphids is not meaningful
     }
 
     // Max score = 8
+    // Gating rule: if streak is clearly absent ("no"), cap at MODERATE
+    // because no other banana disease produces dot-dash streaks —
+    // without it, BBTV is unlikely regardless of other signs
     val verdict = when {
-        score >= 6 -> BBTVVerdict.HIGH
-        score >= 3 -> BBTVVerdict.MODERATE
-        else -> BBTVVerdict.LOW
+        score >= 5 && streak == "yes" -> BBTVVerdict.HIGH
+        score >= 3 || streak == "yes" -> BBTVVerdict.MODERATE
+        else                          -> BBTVVerdict.LOW
     }
 
     return BBTVQuestionnaireResult(
