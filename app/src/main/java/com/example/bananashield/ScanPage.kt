@@ -27,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -41,6 +42,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import android.content.Context
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -83,6 +87,9 @@ fun ScanContent(
     }
 }
 
+private const val PREFS_NAME = "scan_prefs"
+private const val KEY_SKIP_GUIDE = "skip_scan_guide"
+
 @Composable
 fun ModernCameraScreen(
     paddingValues: PaddingValues,
@@ -119,7 +126,8 @@ fun ModernCameraScreen(
     }
 
     var flashEnabled by remember { mutableStateOf(false) }
-    var showGuide by remember { mutableStateOf(false) }
+    val prefs = remember { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+    var showGuide by remember { mutableStateOf(!prefs.getBoolean(KEY_SKIP_GUIDE, false)) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var liveValidation by remember { mutableStateOf<LeafValidation>(LeafValidation.Pending) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
@@ -296,7 +304,12 @@ fun ModernCameraScreen(
 
         // Guide Dialog
         if (showGuide) {
-            ScanGuideDialog(onDismiss = { showGuide = false })
+            ScanGuideDialog(
+                onDismiss = { showGuide = false },
+                onDontShowAgainChanged = { skip ->
+                    prefs.edit().putBoolean(KEY_SKIP_GUIDE, skip).apply()
+                }
+            )
         }
     }
 }
@@ -358,6 +371,8 @@ fun CameraMode(
                 Triple(Color(0xFFB71C1C), "Not a banana leaf: ${liveValidation.detectedLabel}", Icons.Default.Warning)
             is LeafValidation.RejectedByConfidence ->
                 Triple(Color(0xFFE65100), "No banana leaf detected", Icons.Default.Warning)
+            is LeafValidation.RejectedByEntropy ->
+                Triple(Color(0xFFE65100), "Looks similar but not a banana leaf", Icons.Default.Warning)
             is LeafValidation.Pending ->
                 Triple(Color(0xFF424242), "Point camera at a banana leaf to scan", Icons.Default.Eco)
         }
@@ -536,64 +551,101 @@ fun ImagePreviewMode(
     var showLabelInfo by remember { mutableStateOf(false) }
 
     if (showLabelInfo) {
-        AlertDialog(
-            onDismissRequest = { showLabelInfo = false },
-            icon = {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .background(Color(0xFFE8F5E9), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LocalOffer,
-                        contentDescription = null,
-                        tint = Color(0xFF2E7D32),
-                        modifier = Modifier.size(28.dp)
+        Dialog(onDismissRequest = { showLabelInfo = false }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color(0xFF1B3A2D), Color(0xFF0F2318))
+                        )
                     )
+            ) {
+                Column {
+                    // Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 12.dp, top = 20.dp, bottom = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(Color(0xFF2E7D32).copy(alpha = 0.5f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocalOffer,
+                                contentDescription = null,
+                                tint = Color(0xFF81C784),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Why label your plant?",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = Color.White,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { showLabelInfo = false }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Divider(color = Color.White.copy(alpha = 0.08f))
+
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "A plant label helps you identify which specific banana plant this scan belongs to — especially useful when you have many plants in your farm.",
+                            fontSize = 14.sp,
+                            color = Color.White.copy(alpha = 0.85f),
+                            lineHeight = 20.sp
+                        )
+                        Text(
+                            text = "Examples: \"Row 3, Plant 7\", \"Near the fence\", \"Sucker from Plant A\"",
+                            fontSize = 13.sp,
+                            color = Color(0xFF81C784),
+                            lineHeight = 19.sp
+                        )
+                        Text(
+                            text = "The label will appear in your scan history so you can quickly find and track the health of each plant over time.",
+                            fontSize = 14.sp,
+                            color = Color.White.copy(alpha = 0.85f),
+                            lineHeight = 20.sp
+                        )
+                    }
+
+                    Divider(color = Color.White.copy(alpha = 0.08f))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Button(
+                            onClick = { showLabelInfo = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Got it!", fontWeight = FontWeight.SemiBold, color = Color.White)
+                        }
+                    }
                 }
-            },
-            title = {
-                Text(
-                    text = "Why label your plant?",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Center
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "A plant label helps you identify which specific banana plant this scan belongs to — especially useful when you have many plants in your farm.",
-                        fontSize = 14.sp,
-                        color = Color(0xFF424242),
-                        lineHeight = 20.sp
-                    )
-                    Text(
-                        text = "Examples: \"Row 3, Plant 7\", \"Near the fence\", \"Sucker from Plant A\"",
-                        fontSize = 13.sp,
-                        color = Color(0xFF757575),
-                        lineHeight = 19.sp
-                    )
-                    Text(
-                        text = "The label will appear in your scan history so you can quickly find and track the health of each plant over time.",
-                        fontSize = 14.sp,
-                        color = Color(0xFF424242),
-                        lineHeight = 20.sp
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showLabelInfo = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Got it!", fontWeight = FontWeight.SemiBold)
-                }
-            },
-            shape = RoundedCornerShape(20.dp)
-        )
+            }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -783,78 +835,321 @@ fun ImagePreviewMode(
 }
 
 @Composable
-fun ScanGuideDialog(onDismiss: () -> Unit) {
-    AlertDialog(
+fun ScanGuideDialog(onDismiss: () -> Unit, onDontShowAgainChanged: (Boolean) -> Unit) {
+    var viewerRes by remember { mutableStateOf<Int?>(null) }
+    var dontShowAgain by remember { mutableStateOf(false) }
+
+    viewerRes?.let { res ->
+        LookAlikeImageViewerDialog(resId = res, onDismiss = { viewerRes = null })
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        icon = {
-            Box(
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.88f)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF1B3A2D), Color(0xFF0F2318))
+                    )
+                )
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 12.dp, top = 20.dp, bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(Color(0xFF2E7D32).copy(alpha = 0.5f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Camera,
+                            contentDescription = null,
+                            tint = Color(0xFF81C784),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Scanning Tips",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = Color.White,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Divider(color = Color.White.copy(alpha = 0.08f))
+
+                // Scrollable content
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    GuideItem(
+                        icon = Icons.Default.WbSunny,
+                        title = "Good Lighting",
+                        description = "Take photos in bright, natural light for best results"
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    GuideItem(
+                        icon = Icons.Default.PhotoSizeSelectLarge,
+                        title = "Fill the Frame",
+                        description = "Position the leaf to fill most of the camera view"
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    GuideItem(
+                        icon = Icons.Default.CenterFocusStrong,
+                        title = "Focus on Symptoms",
+                        description = "Capture affected areas clearly and in focus"
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    GuideItem(
+                        icon = Icons.Default.Block,
+                        title = "Avoid Blur",
+                        description = "Hold steady and avoid moving while capturing"
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    GuideItem(
+                        icon = Icons.Default.Nature,
+                        title = "Clean Background",
+                        description = "Use a plain surface behind the leaf when possible"
+                    )
+
+                    Spacer(modifier = Modifier.height(22.dp))
+
+                    // Section divider
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Divider(modifier = Modifier.weight(1f), color = Color.White.copy(alpha = 0.15f))
+                        Text(
+                            text = "  NOT A BANANA LEAF  ",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFEF9A9A),
+                            letterSpacing = 1.sp
+                        )
+                        Divider(modifier = Modifier.weight(1f), color = Color.White.copy(alpha = 0.15f))
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "These plants are commonly mistaken for banana leaves.",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.6f),
+                        lineHeight = 17.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    lookAlikePlants.forEach { plant ->
+                        LookAlikeItem(
+                            plant = plant,
+                            onImageClick = { viewerRes = plant.drawableRes }
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+                }
+
+                // Footer
+                Divider(color = Color.White.copy(alpha = 0.08f))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                dontShowAgain = !dontShowAgain
+                                onDontShowAgainChanged(dontShowAgain)
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = dontShowAgain,
+                            onCheckedChange = { checked ->
+                                dontShowAgain = checked
+                                onDontShowAgainChanged(checked)
+                            },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = Color(0xFF4CAF50),
+                                uncheckedColor = Color.White.copy(alpha = 0.5f),
+                                checkmarkColor = Color.White
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Don't show again",
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.75f)
+                        )
+                    }
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Got it!", fontWeight = FontWeight.SemiBold, color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LookAlikeImageViewerDialog(resId: Int, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable { onDismiss() }
+        ) {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(id = resId),
+                contentDescription = null,
                 modifier = Modifier
-                    .size(64.dp)
-                    .background(Color(0xFFE8F5E9), CircleShape),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentScale = ContentScale.Fit
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Camera,
-                    contentDescription = null,
-                    tint = Color(0xFF4CAF50),
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color.White,
                     modifier = Modifier.size(32.dp)
                 )
             }
-        },
-        title = {
-            Text(
-                text = "Scanning Tips",
-                fontWeight = FontWeight.Bold,
-                fontSize = 20.sp,
-                textAlign = TextAlign.Center
-            )
-        },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                GuideItem(
-                    icon = Icons.Default.WbSunny,
-                    title = "Good Lighting",
-                    description = "Take photos in bright, natural light for best results"
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                GuideItem(
-                    icon = Icons.Default.PhotoSizeSelectLarge,
-                    title = "Fill the Frame",
-                    description = "Position the leaf to fill most of the camera view"
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                GuideItem(
-                    icon = Icons.Default.CenterFocusStrong,
-                    title = "Focus on Symptoms",
-                    description = "Capture affected areas clearly and in focus"
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                GuideItem(
-                    icon = Icons.Default.Block,
-                    title = "Avoid Blur",
-                    description = "Hold steady and avoid moving while capturing"
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                GuideItem(
-                    icon = Icons.Default.Nature,
-                    title = "Clean Background",
-                    description = "Use a plain surface behind the leaf when possible"
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF4CAF50)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Got it!", fontWeight = FontWeight.SemiBold)
-            }
-        },
-        shape = RoundedCornerShape(20.dp)
+        }
+    }
+}
+
+data class LookAlikePlant(
+    val name: String,
+    val hint: String,
+    val drawableRes: Int
+)
+
+val lookAlikePlants = listOf(
+    LookAlikePlant(
+        name = "Heliconia",
+        hint = "Narrower, waxy leaf with a prominent midrib. Often has red or orange flower bracts nearby.",
+        drawableRes = R.drawable.lookalike_heliconia
+    ),
+    LookAlikePlant(
+        name = "Bird of Paradise",
+        hint = "Stiffer, paddle-shaped leaf with a long petiole. Splits along the midrib in wind.",
+        drawableRes = R.drawable.lookalike_bird_of_paradise
+    ),
+    LookAlikePlant(
+        name = "Canna Lily",
+        hint = "Smaller, more oval leaf with visible parallel veins and a reddish or green stem.",
+        drawableRes = R.drawable.lookalike_canna_lily
+    ),
+    LookAlikePlant(
+        name = "Taro / Elephant Ear",
+        hint = "Heart-shaped base where the stem attaches to the center of the leaf, not the edge.",
+        drawableRes = R.drawable.lookalike_taro
+    ),
+    LookAlikePlant(
+        name = "Traveller's Palm",
+        hint = "Fan-shaped arrangement of leaves on a single plane. Leaves are more rigid and upright.",
+        drawableRes = R.drawable.lookalike_travellers_palm
+    ),
+    LookAlikePlant(
+        name = "Ginger Plant",
+        hint = "Narrower leaf tapering to a sharp tip. Strong aromatic smell when the leaf is crushed.",
+        drawableRes = R.drawable.lookalike_ginger
     )
+)
+
+@Composable
+fun LookAlikeItem(plant: LookAlikePlant, onImageClick: () -> Unit) {
+    Row(verticalAlignment = Alignment.Top) {
+        Box {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(id = plant.drawableRes),
+                contentDescription = plant.name,
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onImageClick() },
+                contentScale = ContentScale.Crop
+            )
+            // Zoom hint badge
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(3.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 3.dp, vertical = 2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ZoomIn,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(10.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(Color(0xFFEF9A9A), CircleShape)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = plant.name,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+            }
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = plant.hint,
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.65f),
+                lineHeight = 17.sp
+            )
+        }
+    }
 }
 
 @Composable
@@ -867,13 +1162,13 @@ fun GuideItem(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(Color(0xFFF1F8E9), CircleShape),
+                .background(Color(0xFF2E7D32).copy(alpha = 0.4f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = Color(0xFF689F38),
+                tint = Color(0xFF81C784),
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -883,13 +1178,13 @@ fun GuideItem(
                 text = title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF1B5E20)
+                color = Color.White
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = description,
                 fontSize = 12.sp,
-                color = Color(0xFF757575),
+                color = Color.White.copy(alpha = 0.65f),
                 lineHeight = 16.sp
             )
         }

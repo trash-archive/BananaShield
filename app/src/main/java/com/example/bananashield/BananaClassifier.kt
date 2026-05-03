@@ -53,6 +53,7 @@ data class PreventiveMeasure(
 )
 
 const val BANANA_CONFIDENCE_THRESHOLD = 0.60f
+private const val ENTROPY_REJECTION_THRESHOLD = 1.20f // max entropy for 4 classes = ln(4) ≈ 1.386
 
 /** Result of the two-gate validation. */
 sealed class LeafValidation {
@@ -60,6 +61,7 @@ sealed class LeafValidation {
     object Valid : LeafValidation()
     data class RejectedByObject(val detectedLabel: String) : LeafValidation()
     object RejectedByConfidence : LeafValidation()
+    object RejectedByEntropy : LeafValidation()
 }
 
 /**
@@ -123,15 +125,30 @@ class BananaClassifier(private val context: Context) {
         model = ModelUnquant.newInstance(context)
     }
 
-    /** Two-gate validation: ML Kit object check first, then TFLite confidence threshold. */
+    /** Shannon entropy of the output distribution. High entropy = model is confused = likely not a banana leaf. */
+    private fun computeEntropy(confidences: FloatArray): Float {
+        return -confidences.sumOf { p ->
+            if (p > 0f) (p * Math.log(p.toDouble())).toFloat().toDouble() else 0.0
+        }.toFloat()
+    }
+
+    /** Three-gate validation: ML Kit object check, entropy check, then confidence threshold. */
     suspend fun validateLeaf(bitmap: Bitmap): LeafValidation {
         // Gate 1: ML Kit — reject obvious non-plant objects
         val blockedLabel = ObjectLabelChecker.detectBlockedObject(bitmap)
         if (blockedLabel != null) return LeafValidation.RejectedByObject(blockedLabel)
 
-        // Gate 2: TFLite confidence threshold
-        val (valid, _) = isValidBananaLeaf(bitmap)
-        return if (valid) LeafValidation.Valid else LeafValidation.RejectedByConfidence
+        // Gate 2: Entropy — reject look-alike leaves that confuse the model
+        val resizedBitmap = centerCropBitmap(bitmap)
+        val byteBuffer = convertBitmapToByteBuffer(resizedBitmap)
+        val inputFeature = TensorBuffer.createFixedSize(intArrayOf(1, 224, 224, 3), org.tensorflow.lite.DataType.FLOAT32)
+        inputFeature.loadBuffer(byteBuffer)
+        val confidences = model?.process(inputFeature)?.outputFeature0AsTensorBuffer?.floatArray ?: floatArrayOf()
+        if (computeEntropy(confidences) > ENTROPY_REJECTION_THRESHOLD) return LeafValidation.RejectedByEntropy
+
+        // Gate 3: TFLite confidence threshold
+        val maxConf = confidences.maxOrNull() ?: 0f
+        return if (maxConf >= BANANA_CONFIDENCE_THRESHOLD) LeafValidation.Valid else LeafValidation.RejectedByConfidence
     }
 
     /** Returns true only if the top class confidence meets the threshold. */
