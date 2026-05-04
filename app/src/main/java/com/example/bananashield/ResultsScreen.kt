@@ -333,12 +333,6 @@ fun ResultsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                // Class breakdown for transparency
-                if (result.allConfidences.isNotEmpty()) {
-                    ClassBreakdownCard(allConfidences = result.allConfidences)
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
                 SubtleDiseaseCard(
                     result = result,
                     info = info,
@@ -958,89 +952,6 @@ fun SubtleScanAgainButton(onClick: () -> Unit) {
             fontWeight = FontWeight.Medium,
             color = Color.White
         )
-    }
-}
-
-@Composable
-fun ClassBreakdownCard(allConfidences: Map<String, Float>) {
-    val sorted = allConfidences.entries.sortedByDescending { it.value }
-    val topLabel = sorted.firstOrNull()?.key ?: ""
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = CircleShape, color = Color(0xFF42A5F5).copy(alpha = 0.15f)) {
-                    Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.BarChart,
-                            contentDescription = null,
-                            tint = Color(0xFF42A5F5),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Class Probability Breakdown",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF212121)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            sorted.forEach { (label, score) ->
-                val isTop = label == topLabel
-                val barColor = if (isTop) Color(0xFF2E7D32) else Color(0xFF9E9E9E)
-                val pct = (score * 100).toInt()
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = label,
-                        fontSize = 12.sp,
-                        fontWeight = if (isTop) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isTop) Color(0xFF1B5E20) else Color(0xFF616161),
-                        modifier = Modifier.width(140.dp)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFFE0E0E0))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(score.coerceIn(0f, 1f))
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(barColor)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "$pct%",
-                        fontSize = 12.sp,
-                        fontWeight = if (isTop) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isTop) Color(0xFF1B5E20) else Color(0xFF616161),
-                        modifier = Modifier.width(34.dp)
-                    )
-                }
-            }
-        }
     }
 }
 

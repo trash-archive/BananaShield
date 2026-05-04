@@ -369,7 +369,7 @@ fun CameraMode(
             is LeafValidation.Valid ->
                 Triple(Color(0xFF2E7D32), "Banana leaf detected", Icons.Default.CheckCircle)
             is LeafValidation.RejectedByObject ->
-                Triple(Color(0xFFB71C1C), "Not a banana leaf: ${liveValidation.detectedLabel}", Icons.Default.Warning)
+                Triple(Color(0xFFB71C1C), "Not a banana leaf", Icons.Default.Warning)
             is LeafValidation.RejectedByConfidence ->
                 Triple(Color(0xFFE65100), "No banana leaf detected", Icons.Default.Warning)
             is LeafValidation.RejectedByEntropy ->
